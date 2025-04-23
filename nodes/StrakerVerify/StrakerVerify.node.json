@@ -1,0 +1,21 @@
+{
+  "node": "n8n-nodes-base.strakerVerify",
+  "nodeVersion": "1.0",
+  "codexVersion": "1.0",
+  "categories": [
+    "Communication",
+    "Language"
+  ],
+  "resources": {
+    "credentialDocumentation": [
+      {
+        "url": "https://strakerverify.docs.apiary.io/#"
+      }
+    ],
+    "primaryDocumentation": [
+      {
+        "url": "https://docs.n8n.io/integrations/builtin/app-nodes/n8n-nodes-base.straker-verify/"
+      }
+    ]
+  }
+}
