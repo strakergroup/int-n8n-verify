@@ -18,89 +18,30 @@ export const projectOperations: INodeProperties[] = [
 				value: 'confirm',
 				action: 'Confirm a project',
 				description: 'Confirm a project',
-				routing: {
-					request: {
-						method: 'POST',
-						url: '/project/confirm',
-						body: {
-							'projectId': '={{$parameter.projectId}}',
-						},
-						headers: {
-							'Authorization': '=Bearer {{$credentials.apiKey}}',
-						},
-					},
-				},
 			},
 			{
 				name: 'Create',
 				value: 'create',
 				action: 'Create a project with file upload',
 				description: 'Create a new project with file upload',
-				routing: {
-					request: {
-						method: 'POST',
-						url: '/project',
-						headers: {
-							Authorization: '=Bearer {{$credentials.apiKey}}',
-							'Content-Type': 'multipart/form-data',
-						},
-						body: {
-							title: '={{$parameter.title}}',
-							languages: '={{$parameter.languages}}',
-							workflow_id: '={{$parameter.workflowId}}',
-							confirmation_required: '={{$parameter.confirmationRequired}}',
-							files: '={{$binary.data}}',
-						},
-					},
-				},
-
-
-
 			},
 			{
 				name: 'Get',
 				value: 'get',
 				action: 'Get a project',
 				description: 'Get a specific project',
-				routing: {
-					request: {
-						method: 'GET',
-						url: '/project/{{$parameter.projectId}}',
-						headers: {
-							'Authorization': '=Bearer {{$credentials.apiKey}}',
-						},
-					},
-				},
 			},
 			{
 				name: 'Get Many',
 				value: 'getAll',
 				action: 'Get many projects',
 				description: 'Get many projects',
-				routing: {
-					request: {
-						method: 'GET',
-						url: '/project',
-						headers: {
-							'Authorization': '=Bearer {{$credentials.apiKey}}',
-						},
-					},
-				},
 			},
 			{
 				name: 'Get Segments',
 				value: 'getSegments',
 				action: 'Get project segments',
 				description: 'Retrieve segments of a specific project',
-				routing: {
-					request: {
-						method: 'GET',
-						url: '/project/{{$parameter.projectId}}/segments/{{$parameter.fileId}}/{{$parameter.languageId}}',
-						headers: {
-							'Authorization': '=Bearer {{$credentials.apiKey}}',
-						},
-					},
-				},
 			},
 		],
 		default: 'getAll',
@@ -217,7 +158,6 @@ export const projectFields: INodeProperties[] = [
 				operation: ['create'],
 			},
 		},
-		description: 'Binary property name(s) to send (e.g. "data" or "data,files")',
+		description: 'Binary property name(s) to send (e.g. "data" or "data,files")'
 	}
-
 ];

@@ -1,6 +1,6 @@
 import { INodeProperties } from 'n8n-workflow';
 
-// Language operations
+// When the resource 'language' is selected, this 'operation' parameter will be shown.
 export const languageOperations: INodeProperties[] = [
 	{
 		displayName: 'Operation',
@@ -17,21 +17,12 @@ export const languageOperations: INodeProperties[] = [
 				name: 'Get Many',
 				value: 'getAll',
 				action: 'Get many languages',
-				description: 'Get many supported languages',
-				routing: {
-					request: {
-						method: 'GET',
-						url: '/languages',
-						headers: {
-							'Authorization': '=Bearer {{$credentials.apiKey}}',
-						},
-					},
-				},
+				description: 'Get a list of many available languages',
 			},
 		],
 		default: 'getAll',
 	},
 ];
 
-// No fields needed for language operations
+// Here we define any fields that are needed for language operations
 export const languageFields: INodeProperties[] = [];

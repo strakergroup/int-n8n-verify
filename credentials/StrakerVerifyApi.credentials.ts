@@ -27,6 +27,14 @@ export class StrakerVerifyApi implements ICredentialType {
 			default: 'http://localhost:11001',
 			description: 'The base URL of the Straker Verify API',
 		},
+		// private base url
+		{
+			displayName: 'Private Base URL',
+			name: 'privateBaseUrl',
+			type: 'string',
+			default: 'http://localhost:11001',
+			description: 'The private base URL of the Straker Verify API',
+		},
 	];
 
 	// This allows the credential to be used by other parts of n8n

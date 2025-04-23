@@ -14,34 +14,16 @@ export const workflowOperations: INodeProperties[] = [
 		},
 		options: [
 			{
-				name: 'Get',
-				value: 'get',
-				action: 'Get a workflow',
-				description: 'Get a specific workflow',
-				routing: {
-					request: {
-						method: 'GET',
-						url: '/workflow/{{$parameter.workflowId}}',
-						headers: {
-							'Authorization': '=Bearer {{$credentials.apiKey}}',
-						},
-					},
-				},
-			},
-			{
 				name: 'Get Many',
 				value: 'getAll',
 				action: 'Get many workflows',
-				description: 'Get many available workflows',
-				routing: {
-					request: {
-						method: 'GET',
-						url: '/workflow',
-						headers: {
-							'Authorization': '=Bearer {{$credentials.apiKey}}',
-						},
-					},
-				},
+				description: 'Get a list of many workflows',
+			},
+			{
+				name: 'Get One',
+				value: 'getOne',
+				action: 'Get one workflow',
+				description: 'Get a single workflow by ID',
 			},
 		],
 		default: 'getAll',
@@ -59,9 +41,8 @@ export const workflowFields: INodeProperties[] = [
 		displayOptions: {
 			show: {
 				resource: ['workflow'],
-				operation: ['get'],
+				operation: ['getOne'],
 			},
 		},
-		description: 'The ID of the workflow',
 	},
 ];

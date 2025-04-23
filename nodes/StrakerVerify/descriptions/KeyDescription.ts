@@ -1,6 +1,6 @@
 import { INodeProperties } from 'n8n-workflow';
 
-// Key operations
+// When the resource 'key' is selected, this 'operation' parameter will be shown.
 export const keyOperations: INodeProperties[] = [
 	{
 		displayName: 'Operation',
@@ -18,53 +18,64 @@ export const keyOperations: INodeProperties[] = [
 				value: 'create',
 				action: 'Create an API key',
 				description: 'Create a new API key',
-				routing: {
-					request: {
-						method: 'POST',
-						url: '/key',
-						headers: {
-							'Authorization': '=Bearer {{$credentials.apiKey}}',
-						},
-					},
-				},
+			},
+			{
+				name: 'Delete',
+				value: 'delete',
+				action: 'Delete an API key',
+				description: 'Delete an API key',
 			},
 			{
 				name: 'Get',
 				value: 'get',
-				action: 'Get an API key',
-				description: 'Get a specific API key',
-				routing: {
-					request: {
-						method: 'GET',
-						url: '/key/{{$parameter.keyId}}',
-						headers: {
-							'Authorization': '=Bearer {{$credentials.apiKey}}',
-						},
-					},
-				},
-			},
-			{
-				name: 'Get Many',
-				value: 'getAll',
-				action: 'Get many API keys',
-				description: 'Get many API keys',
-				routing: {
-					request: {
-						method: 'GET',
-						url: '/key',
-						headers: {
-							'Authorization': '=Bearer {{$credentials.apiKey}}',
-						},
-					},
-				},
+				action: 'Get API keys',
+				description: 'Get all API keys',
 			},
 		],
-		default: 'getAll',
+		default: 'get',
 	},
 ];
 
 // Here we define any fields that are needed for key operations
 export const keyFields: INodeProperties[] = [
+	{
+		displayName: 'Name',
+		name: 'name',
+		type: 'string',
+		required: true,
+		default: '',
+		displayOptions: {
+			show: {
+				resource: ['key'],
+				operation: ['create'],
+			},
+		},
+		description: 'The name of the API key',
+	},
+	{
+		displayName: 'Role',
+		name: 'role',
+		type: 'options',
+		required: true,
+		default: 'USER',
+		options: [
+			{
+				name: 'Admin',
+				value: 'ADMIN',
+			},
+			{
+				name: 'User',
+				value: 'USER',
+			},
+		],
+		displayOptions: {
+			show: {
+				resource: ['key'],
+				operation: ['create'],
+			},
+		},
+		description: 'The role to assign to the API key',
+	},
 	{
 		displayName: 'Key ID',
 		name: 'keyId',
@@ -74,38 +85,10 @@ export const keyFields: INodeProperties[] = [
 		displayOptions: {
 			show: {
 				resource: ['key'],
-				operation: ['get'],
+				operation: ['delete'],
 			},
 		},
-		description: 'The ID of the API key',
-	},
-	{
-		displayName: 'Additional Fields',
-		name: 'additionalFields',
-		type: 'collection',
-		placeholder: 'Add Field',
-		default: {},
-		displayOptions: {
-			show: {
-				resource: ['key'],
-				operation: ['create'],
-			},
-		},
-		options: [
-			{
-				displayName: 'Description',
-				name: 'description',
-				type: 'string',
-				default: '',
-				description: 'Description of the API key',
-			},
-			{
-				displayName: 'Expiry Date',
-				name: 'expiryDate',
-				type: 'dateTime',
-				default: '',
-				description: 'Expiry date of the API key',
-			},
-		],
+		description: 'The ID of the API key to delete',
 	},
 ];
+

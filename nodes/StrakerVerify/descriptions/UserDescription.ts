@@ -1,6 +1,6 @@
 import { INodeProperties } from 'n8n-workflow';
 
-// User operations
+// When the resource 'user' is selected, this 'operation' parameter will be shown.
 export const userOperations: INodeProperties[] = [
 	{
 		displayName: 'Operation',
@@ -14,22 +14,13 @@ export const userOperations: INodeProperties[] = [
 		},
 		options: [
 			{
-				name: 'Get Balance',
-				value: 'getBalance',
-				action: 'Get token balance',
-				description: 'Get the user token balance',
-				routing: {
-					request: {
-						method: 'GET',
-						url: '/user/balance',
-						headers: {
-							'Authorization': '=Bearer {{$credentials.apiKey}}',
-						},
-					},
-				},
+				name: 'Get Current User',
+				value: 'me',
+				action: 'Get current user information',
+				description: 'Get the currently authenticated user information',
 			},
 		],
-		default: 'getBalance',
+		default: 'me',
 	},
 ];
 
