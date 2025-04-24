@@ -32,7 +32,7 @@ Follow the [installation guide](https://docs.n8n.io/integrations/community-nodes
 
 ### File Resource
 
-* **Download**: Download a file from a project
+* **Get**: Download a file by ID returning binary data
 
 ### Key Resource
 
@@ -70,3 +70,11 @@ To use this node, you'll need to create an API key from the Straker Verify platf
 
 * [n8n community nodes documentation](https://docs.n8n.io/integrations/community-nodes/)
 * [Straker Verify API Documentation](https://strakerverify.docs.apiary.io)
+
+## Binary Data Handling
+
+This node supports proper binary data handling for files:
+
+* When using the **File > Get** operation, the node returns data in binary format that can be used directly with other n8n nodes like Google Drive, AWS S3, etc.
+* When using the binary data with other nodes, refer to the binary property name `data` in the receiving node's configuration.
+* Project creation also accepts binary files as input through the binary property specified in the Files field.
