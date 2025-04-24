@@ -19,8 +19,8 @@ import {
 	userFields,
 	workflowOperations,
 	workflowFields,
-	evaluationJobOperations,
-	evaluationJobFields,
+	fileOperations,
+	fileFields,
 } from './descriptions';
 
 // Project operations
@@ -306,96 +306,60 @@ async function workflowGetOne(
 	});
 }
 
-// Evaluation Job operations
-async function evaluationJobCreate(
+// File operations
+async function fileGet(
 	this: IExecuteFunctions,
 	i: number,
-	privateBaseUrl: string,
-	items: INodeExecutionData[],
+	baseUrl: string,
 	credentials: IDataObject,
-): Promise<any> {
-	// Get parameters
-	const targetLanguages = this.getNodeParameter('targetLanguages', i) as string;
-	const title = this.getNodeParameter('title', i) as string;
-	const workflowId = this.getNodeParameter('workflowId', i) as string;
-	const source = this.getNodeParameter('source', i) as string;
-	const apiKey = this.getNodeParameter('apiKey', i) as string;
-	const confirmationRequired = this.getNodeParameter('confirmationRequired', i) as boolean;
-	const binaryPropertyName = this.getNodeParameter('files', i) as string;
-
-	// Check binary data exists
-	if (items[i].binary === undefined) {
-		throw new NodeOperationError(this.getNode(), 'No binary data exists on item!', {
-			itemIndex: i,
-		});
-	}
-
-	// Process multiple files if binaryPropertyName contains commas
-	const binaryProperties = binaryPropertyName.split(',').map(property => property.trim());
-
-	// Create FormData for multipart request
-	const FormData = require('form-data');
-	const form = new FormData();
-
-	// Add text fields to form
-	if (title) {
-		form.append('title', title);
-	}
-
-	// Split target languages by comma and add each as a separate form field
-	const languageArray = targetLanguages.split(',').map(lang => lang.trim());
-	for (const lang of languageArray) {
-		form.append('target_languages', lang);
-	}
-
-	if (workflowId) {
-		form.append('workflow', workflowId);
-	}
-
-	form.append('source', source);
-
-	if (apiKey) {
-		form.append('api_key', apiKey);
-	}
-
-	form.append('confirmation_required', confirmationRequired ? 'true' : 'false');
-
-	// Add files to form
-	for (const property of binaryProperties) {
-		const binaryData = items[i].binary![property];
-		if (binaryData === undefined) {
-			throw new NodeOperationError(
-				this.getNode(),
-				`No binary data property "${property}" does not exists on item!`,
-				{ itemIndex: i },
-			);
-		}
-
-		// Convert base64 data to a buffer and append to form
-		const fileBuffer = Buffer.from(binaryData.data, 'base64');
-		form.append('files', fileBuffer, {
-			filename: binaryData.fileName || 'file',
-			contentType: binaryData.mimeType,
-		});
-	}
-
-	// Set up headers with authentication
-	const headers = {
-		...form.getHeaders(),
-		Authorization: `Bearer ${credentials.apiKey}`,
-	};
+): Promise<INodeExecutionData> {
+	const fileId = this.getNodeParameter('fileId', i) as string;
 
 	try {
-		// Make the request
-		const response = await this.helpers.httpRequest({
-			method: 'POST',
-			url: `${privateBaseUrl}/evaluate/create`,
-			body: form,
-			headers,
+		// Make a simple request to get the file
+		const response = await this.helpers.request({
+			method: 'GET',
+			uri: `${baseUrl}/file/${fileId}`,
+			headers: {
+				Accept: '*/*',
+				Authorization: `Bearer ${credentials.apiKey}`,
+			},
+			encoding: null,
+			resolveWithFullResponse: true,
 		});
 
-		// Return the response data
-		return response;
+		if (response.statusCode !== 200) {
+			throw new NodeOperationError(this.getNode(), `Request failed with status code ${response.statusCode}`);
+		}
+
+		// Get content type from headers
+		const contentType = response.headers['content-type'] || 'application/octet-stream';
+
+		// Try to get filename from content-disposition header if available
+		let fileName = `${fileId}.file`;
+		const contentDisposition = response.headers['content-disposition'];
+		if (contentDisposition) {
+			const filenameMatch = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(contentDisposition);
+			if (filenameMatch && filenameMatch[1]) {
+				fileName = filenameMatch[1].replace(/['"]/g, '');
+			}
+		}
+
+		// Create a proper binary data object
+		const buffer = Buffer.from(response.body);
+		const binaryData = await this.helpers.prepareBinaryData(buffer, fileName, contentType);
+
+		// Return data in the n8n-compatible format
+		return {
+			json: {
+				fileId,
+				fileName,
+				contentType,
+			},
+			binary: {
+				data: binaryData,
+			},
+		};
 	} catch (error) {
 		// Log error for debugging
 		console.error('API Error:', error);
@@ -441,8 +405,8 @@ export class StrakerVerify implements INodeType {
 				noDataExpression: true,
 				options: [
 					{
-						name: 'Evaluation Job',
-						value: 'evaluationJob',
+						name: 'File',
+						value: 'file',
 					},
 					{
 						name: 'Key',
@@ -488,9 +452,9 @@ export class StrakerVerify implements INodeType {
 			...workflowOperations,
 			...workflowFields,
 
-			// Add the operations for evaluation job resource
-			...evaluationJobOperations,
-			...evaluationJobFields,
+			// File operations
+			...fileOperations,
+			...fileFields,
 		],
 	};
 
@@ -502,7 +466,6 @@ export class StrakerVerify implements INodeType {
 		const operation = this.getNodeParameter('operation', 0) as string;
 		const credentials = await this.getCredentials('strakerVerifyApi');
 		const baseUrl = (credentials.baseUrl as string) || 'http://localhost:11001';
-		const privateBaseUrl = (credentials.privateBaseUrl as string) || 'http://localhost:11001';
 
 		// Process each item
 		for (let i = 0; i < items.length; i++) {
@@ -602,16 +565,17 @@ export class StrakerVerify implements INodeType {
 						}
 						break;
 
-					case 'evaluationJob':
-						// Handle evaluation job operations with a switch statement
+					case 'file':
+						// Handle file operations with a switch statement
 						switch (operation) {
-							case 'create':
-								responseData = await evaluationJobCreate.call(this, i, privateBaseUrl, items, credentials);
-								break;
+							case 'get':
+								// File get returns a complete INodeExecutionData with binary data
+								returnData.push(await fileGet.call(this, i, baseUrl, credentials));
+								continue; // Skip the standard returnData.push below
 							default:
 								throw new NodeOperationError(
 									this.getNode(),
-									`The operation "${operation}" is not supported for resource "evaluationJob"!`,
+									`The operation "${operation}" is not supported for resource "file"!`,
 								);
 						}
 						break;

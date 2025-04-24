@@ -3,4 +3,4 @@ export { languageOperations, languageFields } from './LanguageDescription';
 export { projectOperations, projectFields } from './ProjectDescription';
 export { userOperations, userFields } from './UserDescription';
 export { workflowOperations, workflowFields } from './WorkflowDescription';
-export { evaluationJobOperations, evaluationJobFields } from './EvaluationJobDescription';
+export { fileOperations, fileFields } from './FileDescription';
