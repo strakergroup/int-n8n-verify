@@ -68,26 +68,22 @@ async function projectCreate(
 	const languages = this.getNodeParameter('languages', i) as string;
 	const workflowId = this.getNodeParameter('workflowId', i) as string;
 	const confirmationRequired = this.getNodeParameter('confirmationRequired', i) as boolean;
-	const binaryPropertyName = this.getNodeParameter('files', i) as string;
+	// Get the name of the property within item.binary that holds the array of file objects
+	const binaryProperty = this.getNodeParameter('binaryProperty', i, 'binary') as string;
 
-	// Check binary data exists
-	if (items[i].binary === undefined) {
-		throw new NodeOperationError(this.getNode(), 'No binary data exists on item!', {
-			itemIndex: i,
-		});
+	// Check if the primary binary object and the specified property exist
+	if (!items[i].binary || typeof items[i].binary !== 'object') {
+		throw new NodeOperationError(this.getNode(), 'Input item is missing the required top-level binary object.', { itemIndex: i });
 	}
-
-	const binaryData = items[i].binary![binaryPropertyName];
-	if (binaryData === undefined) {
-		throw new NodeOperationError(
-			this.getNode(),
-			`No binary data property "${binaryPropertyName}" does not exists on item!`,
-			{ itemIndex: i },
-		);
+	const binaryDataArray = items[i].binary![binaryProperty];
+	if (!Array.isArray(binaryDataArray)) {
+		throw new NodeOperationError(this.getNode(), `Binary property "${binaryProperty}" was found, but it is not an array as expected.`, { itemIndex: i });
+	}
+	if (binaryDataArray.length === 0) {
+		throw new NodeOperationError(this.getNode(), `Binary property array "${binaryProperty}" was found, but it is empty.`, { itemIndex: i });
 	}
 
 	// Manual approach using multipart form-data
-	// FormData isn't available in Node.js natively, use the form-data package
 	const FormData = require('form-data');
 	const form = new FormData();
 
@@ -100,20 +96,37 @@ async function projectCreate(
 		form.append('workflow_id', workflowId);
 	}
 
-	// Add the file
-	// Convert base64 data to a buffer and append to form
-	const fileBuffer = Buffer.from(binaryData.data, 'base64');
-	form.append('files', fileBuffer, {
-		filename: binaryData.fileName || 'file',
-		contentType: binaryData.mimeType,
-	});
+	// Process the array of binary file objects
+	console.log(`Processing ${binaryDataArray.length} file object(s) from property "${binaryProperty}".`);
+	for (const binaryData of binaryDataArray) {
+		// Validate the structure of each object in the array
+		if (!binaryData || typeof binaryData !== 'object' || !binaryData.data || !binaryData.fileName || !binaryData.mimeType) {
+			console.warn('Skipping invalid binary data object within the array:', binaryData);
+			continue; // Skip malformed objects
+		}
+
+		try {
+			// Convert base64 data to a buffer
+			const fileBuffer = Buffer.from(binaryData.data, 'base64');
+
+			// Append the file buffer to the form using the key 'files'
+			form.append('files', fileBuffer, {
+				filename: binaryData.fileName,
+				contentType: binaryData.mimeType,
+			});
+			console.log(`Added file to form: ${binaryData.fileName} (${binaryData.mimeType})`);
+		} catch (e) {
+			console.error(`Error processing binary file ${binaryData.fileName}: ${e.message}`);
+			throw new NodeOperationError(this.getNode(), `Failed to decode or append binary file: ${binaryData.fileName}`, { itemIndex: i });
+		}
+	}
 
 	// Get API key from credentials
 	const apiKey = credentials.apiKey as string;
 
 	// Set up headers with authentication
 	const headers = {
-		...form.getHeaders(),
+		...form.getHeaders(), // Generate Content-Type: multipart/form-data with boundary
 		Authorization: `Bearer ${apiKey}`,
 	};
 
@@ -122,23 +135,20 @@ async function projectCreate(
 		const response = await this.helpers.httpRequest({
 			method: 'POST',
 			url: `${baseUrl}/project`,
-			body: form,
+			body: form, // Pass the FormData object as the body
 			headers,
 		});
 
-		// Ensure we always return an object even if response is empty
-		const responseData = response || { success: true };
-
-		// Return the response data
-		return responseData;
+		// Return the response data (ensure it's always an object)
+		return response || { success: true };
 	} catch (error) {
-		// Log error for debugging
-		console.error('API Error:', error);
+		// Log simplified error
+		console.error('Project Create API Error:', error.message || 'Unknown error');
 
 		// Properly format error for n8n
 		if (error.response) {
 			throw new NodeApiError(this.getNode(), error, {
-				message: `Request failed with status code ${error.response.status}: ${JSON.stringify(error.response.data)}`,
+				message: `Request failed with status code ${error.response.status}`,
 			});
 		}
 		throw error;
@@ -311,6 +321,7 @@ async function fileGet(
 	this: IExecuteFunctions,
 	i: number,
 	baseUrl: string,
+	_items: INodeExecutionData[],
 	credentials: IDataObject,
 ): Promise<INodeExecutionData> {
 	const fileId = this.getNodeParameter('fileId', i) as string;
@@ -361,13 +372,13 @@ async function fileGet(
 			},
 		};
 	} catch (error) {
-		// Log error for debugging
-		console.error('API Error:', error);
+		// Log error for debugging, without including potential binary data
+		console.error('File API Error:', error.message || 'Unknown error');
 
 		// Properly format error for n8n
 		if (error.response) {
 			throw new NodeApiError(this.getNode(), error, {
-				message: `Request failed with status code ${error.response.status}: ${JSON.stringify(error.response.data)}`,
+				message: `Request failed with status code ${error.response.status}`,
 			});
 		}
 		throw error;
@@ -466,6 +477,20 @@ export class StrakerVerify implements INodeType {
 		const operation = this.getNodeParameter('operation', 0) as string;
 		const credentials = await this.getCredentials('strakerVerifyApi');
 		const baseUrl = (credentials.baseUrl as string) || 'http://localhost:11001';
+
+		// Add initial diagnostic logging
+		console.log('===== DEBUG: Node Execution Start =====');
+		console.log(`Resource: ${resource}, Operation: ${operation}`);
+		console.log(`Number of input items: ${items.length}`);
+		for (let i = 0; i < items.length; i++) {
+			console.log(`--- Item ${i} ---`);
+			console.log(`Has json data: ${!!items[i].json}`);
+			console.log(`Has binary data: ${!!items[i].binary}`);
+			if (items[i].binary && typeof items[i].binary === 'object') {
+				const binaryData = items[i].binary as Record<string, unknown>;
+				console.log(`Binary properties: ${Object.keys(binaryData).join(', ')}`);
+			}
+		}
 
 		// Process each item
 		for (let i = 0; i < items.length; i++) {
@@ -570,7 +595,7 @@ export class StrakerVerify implements INodeType {
 						switch (operation) {
 							case 'get':
 								// File get returns a complete INodeExecutionData with binary data
-								returnData.push(await fileGet.call(this, i, baseUrl, credentials));
+								returnData.push(await fileGet.call(this, i, baseUrl, items, credentials));
 								continue; // Skip the standard returnData.push below
 							default:
 								throw new NodeOperationError(
@@ -606,3 +631,5 @@ export class StrakerVerify implements INodeType {
 		return [returnData];
 	}
 }
+
+

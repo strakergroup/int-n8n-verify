@@ -77,4 +77,4 @@ This node supports proper binary data handling for files:
 
 * When using the **File > Get** operation, the node returns data in binary format that can be used directly with other n8n nodes like Google Drive, AWS S3, etc.
 * When using the binary data with other nodes, refer to the binary property name `data` in the receiving node's configuration.
-* Project creation also accepts binary files as input through the binary property specified in the Files field.
+* Project creation accepts binary files as input through the binary properties specified in the Files field. You can specify multiple files by using comma-separated property names (e.g., "data", "data,document", or "file1,file2,file3").

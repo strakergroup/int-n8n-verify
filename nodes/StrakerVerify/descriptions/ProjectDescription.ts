@@ -131,7 +131,7 @@ export const projectFields: INodeProperties[] = [
 				operation: ['create'],
 			},
 		},
-		description: 'UUID of the workflow to use',
+		description: 'UUID of the workflow to use (optional)',
 	},
 	{
 		displayName: 'Confirmation Required',
@@ -147,10 +147,10 @@ export const projectFields: INodeProperties[] = [
 		description: 'Whether confirmation is required for the project',
 	},
 	{
-		displayName: 'Files',
-		name: 'files',
+		displayName: 'Binary Property',
+		name: 'binaryProperty',
 		type: 'string',
-		default: 'data',
+		default: 'binary', // Default to the structure seen in the screenshot
 		required: true,
 		displayOptions: {
 			show: {
@@ -158,6 +158,6 @@ export const projectFields: INodeProperties[] = [
 				operation: ['create'],
 			},
 		},
-		description: 'Binary property name(s) to send (e.g. "data" or "data,files")'
-	}
+		description: 'The name of the property within the input item\'s binary data that holds the array of file objects (e.g., \'binary\' if the files are in item.binary.binary)',
+	},
 ];
