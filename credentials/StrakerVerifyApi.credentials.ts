@@ -24,7 +24,7 @@ export class StrakerVerifyApi implements ICredentialType {
 			displayName: 'Base URL',
 			name: 'baseUrl',
 			type: 'string',
-			default: 'http://localhost:11001',
+			default: 'https://api-verify.straker.ai/',
 			description: 'The base URL of the Straker Verify API',
 		},
 	];

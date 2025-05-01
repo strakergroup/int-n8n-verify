@@ -69,7 +69,7 @@ To use this node, you'll need to create an API key from the Straker Verify platf
 ## Resources
 
 * [n8n community nodes documentation](https://docs.n8n.io/integrations/community-nodes/)
-* [Straker Verify API Documentation](https://strakerverify.docs.apiary.io)
+* [Straker Verify API Documentation](https://api-verify.straker.ai/docs#/)
 
 ## Binary Data Handling
 
