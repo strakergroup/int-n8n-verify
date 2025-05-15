@@ -96,8 +96,6 @@ async function projectCreate(
 		);
 	}
 
-	// Manual approach using multipart form-data
-	const FormData = require('form-data');
 	const form = new FormData();
 
 	// Add basic fields
@@ -111,7 +109,7 @@ async function projectCreate(
 	}
 
 	// Process the array of binary file objects
-	console.log(
+	this.logger.debug(
 		`Processing ${binaryDataArray.length} file object(s) from property "${binaryProperty}".`,
 	);
 	for (const binaryData of binaryDataArray) {
@@ -123,7 +121,7 @@ async function projectCreate(
 			!binaryData.fileName ||
 			!binaryData.mimeType
 		) {
-			console.warn('Skipping invalid binary data object within the array:', binaryData);
+			this.logger.warn('Skipping invalid binary data object within the array:', binaryData);
 			continue; // Skip malformed objects
 		}
 
@@ -132,13 +130,12 @@ async function projectCreate(
 			const fileBuffer = Buffer.from(binaryData.data, 'base64');
 
 			// Append the file buffer to the form using the key 'files'
-			form.append('files', fileBuffer, {
-				filename: binaryData.fileName,
-				contentType: binaryData.mimeType,
-			});
-			console.log(`Added file to form: ${binaryData.fileName} (${binaryData.mimeType})`);
+			// Revert to using Blob for more standard FormData construction
+			const blob = new Blob([fileBuffer], { type: binaryData.mimeType });
+			form.append('files', blob, binaryData.fileName);
+			this.logger.debug(`Added file to form: ${binaryData.fileName} (${binaryData.mimeType})`);
 		} catch (e) {
-			console.error(`Error processing binary file ${binaryData.fileName}: ${e.message}`);
+			this.logger.error(`Error processing binary file ${binaryData.fileName}: ${e.message}`);
 			throw new NodeOperationError(
 				this.getNode(),
 				`Failed to decode or append binary file: ${binaryData.fileName}`,
@@ -152,8 +149,8 @@ async function projectCreate(
 
 	// Set up headers with authentication
 	const headers = {
-		...form.getHeaders(), // Generate Content-Type: multipart/form-data with boundary
 		Authorization: `Bearer ${apiKey}`,
+		// Content-Type header will be set automatically by httpRequest when body is FormData
 	};
 
 	try {
@@ -169,7 +166,7 @@ async function projectCreate(
 		return response || { success: true };
 	} catch (error) {
 		// Log simplified error
-		console.error('Project Create API Error:', error.message || 'Unknown error');
+		this.logger.error('Project Create API Error:', error.message || 'Unknown error');
 
 		// Properly format error for n8n
 		if (error.response) {
@@ -402,7 +399,7 @@ async function fileGet(
 		};
 	} catch (error) {
 		// Log error for debugging, without including potential binary data
-		console.error('File API Error:', error.message || 'Unknown error');
+		this.logger.error('File API Error:', error.message || 'Unknown error');
 
 		// Properly format error for n8n
 		if (error.response) {
@@ -508,16 +505,16 @@ export class StrakerVerify implements INodeType {
 		const baseUrl = (credentials.baseUrl as string) || 'https://api-verify.straker.ai/';
 
 		// Add initial diagnostic logging
-		console.log('===== DEBUG: Node Execution Start =====');
-		console.log(`Resource: ${resource}, Operation: ${operation}`);
-		console.log(`Number of input items: ${items.length}`);
+		this.logger.debug('===== DEBUG: Node Execution Start =====');
+		this.logger.debug(`Resource: ${resource}, Operation: ${operation}`);
+		this.logger.debug(`Number of input items: ${items.length}`);
 		for (let i = 0; i < items.length; i++) {
-			console.log(`--- Item ${i} ---`);
-			console.log(`Has json data: ${!!items[i].json}`);
-			console.log(`Has binary data: ${!!items[i].binary}`);
+			this.logger.debug(`--- Item ${i} ---`);
+			this.logger.debug(`Has json data: ${!!items[i].json}`);
+			this.logger.debug(`Has binary data: ${!!items[i].binary}`);
 			if (items[i].binary && typeof items[i].binary === 'object') {
 				const binaryData = items[i].binary as Record<string, unknown>;
-				console.log(`Binary properties: ${Object.keys(binaryData).join(', ')}`);
+				this.logger.debug(`Binary properties: ${Object.keys(binaryData).join(', ')}`);
 			}
 		}
 
@@ -526,10 +523,8 @@ export class StrakerVerify implements INodeType {
 			try {
 				let responseData;
 
-				// Use switch statements to route to the appropriate resource handler
 				switch (resource) {
 					case 'project':
-						// Handle project operations with a switch statement
 						switch (operation) {
 							case 'getAll':
 								responseData = await projectGetAll.call(this, i, baseUrl, credentials);
@@ -555,7 +550,6 @@ export class StrakerVerify implements INodeType {
 						break;
 
 					case 'language':
-						// Handle language operations with a switch statement
 						switch (operation) {
 							case 'getAll':
 								responseData = await languageGetAll.call(this, i, baseUrl, credentials);
@@ -569,7 +563,6 @@ export class StrakerVerify implements INodeType {
 						break;
 
 					case 'key':
-						// Handle key operations with a switch statement
 						switch (operation) {
 							case 'get':
 								responseData = await keyGet.call(this, i, baseUrl, credentials);
@@ -589,7 +582,6 @@ export class StrakerVerify implements INodeType {
 						break;
 
 					case 'user':
-						// Handle user operations with a switch statement
 						switch (operation) {
 							case 'me':
 								responseData = await userGetMe.call(this, i, baseUrl, credentials);
@@ -603,7 +595,6 @@ export class StrakerVerify implements INodeType {
 						break;
 
 					case 'workflow':
-						// Handle workflow operations with a switch statement
 						switch (operation) {
 							case 'getAll':
 								responseData = await workflowGetAll.call(this, i, baseUrl, credentials);
@@ -620,12 +611,10 @@ export class StrakerVerify implements INodeType {
 						break;
 
 					case 'file':
-						// Handle file operations with a switch statement
 						switch (operation) {
 							case 'get':
-								// File get returns a complete INodeExecutionData with binary data
 								returnData.push(await fileGet.call(this, i, baseUrl, items, credentials));
-								continue; // Skip the standard returnData.push below
+								continue;
 							default:
 								throw new NodeOperationError(
 									this.getNode(),
