@@ -158,6 +158,20 @@ export const projectFields: INodeProperties[] = [
 				operation: ['create'],
 			},
 		},
-		description: 'The name of the property within the input item\'s binary data that holds the array of file objects (e.g., \'binary\' if the files are in item.binary.binary)',
+		description: "The name of the property within the input item's binary data that holds the array of file objects (e.g., 'binary' if the files are in item.binary.binary)",
 	},
+	{
+		displayName: 'Callback URL',
+		name: 'callbackUrl',
+		type: 'string',
+		default: '',
+		required: true,
+		displayOptions: {
+			show: {
+				resource: ['project'],
+				operation: ['create'],
+			},
+		},
+		description: 'The URL to send the callback to once the project is completed',
+	}
 ];

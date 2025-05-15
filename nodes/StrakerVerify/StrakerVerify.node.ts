@@ -68,19 +68,32 @@ async function projectCreate(
 	const languages = this.getNodeParameter('languages', i) as string;
 	const workflowId = this.getNodeParameter('workflowId', i) as string;
 	const confirmationRequired = this.getNodeParameter('confirmationRequired', i) as boolean;
+	const callbackUrl = this.getNodeParameter('callbackUrl', i) as string;
 	// Get the name of the property within item.binary that holds the array of file objects
 	const binaryProperty = this.getNodeParameter('binaryProperty', i, 'binary') as string;
 
 	// Check if the primary binary object and the specified property exist
 	if (!items[i].binary || typeof items[i].binary !== 'object') {
-		throw new NodeOperationError(this.getNode(), 'Input item is missing the required top-level binary object.', { itemIndex: i });
+		throw new NodeOperationError(
+			this.getNode(),
+			'Input item is missing the required top-level binary object.',
+			{ itemIndex: i },
+		);
 	}
 	const binaryDataArray = items[i].binary![binaryProperty];
 	if (!Array.isArray(binaryDataArray)) {
-		throw new NodeOperationError(this.getNode(), `Binary property "${binaryProperty}" was found, but it is not an array as expected.`, { itemIndex: i });
+		throw new NodeOperationError(
+			this.getNode(),
+			`Binary property "${binaryProperty}" was found, but it is not an array as expected.`,
+			{ itemIndex: i },
+		);
 	}
 	if (binaryDataArray.length === 0) {
-		throw new NodeOperationError(this.getNode(), `Binary property array "${binaryProperty}" was found, but it is empty.`, { itemIndex: i });
+		throw new NodeOperationError(
+			this.getNode(),
+			`Binary property array "${binaryProperty}" was found, but it is empty.`,
+			{ itemIndex: i },
+		);
 	}
 
 	// Manual approach using multipart form-data
@@ -91,16 +104,25 @@ async function projectCreate(
 	form.append('title', title);
 	form.append('languages', languages);
 	form.append('confirmation_required', confirmationRequired ? 'true' : 'false');
+	form.append('callback_uri', callbackUrl);
 
 	if (workflowId) {
 		form.append('workflow_id', workflowId);
 	}
 
 	// Process the array of binary file objects
-	console.log(`Processing ${binaryDataArray.length} file object(s) from property "${binaryProperty}".`);
+	console.log(
+		`Processing ${binaryDataArray.length} file object(s) from property "${binaryProperty}".`,
+	);
 	for (const binaryData of binaryDataArray) {
 		// Validate the structure of each object in the array
-		if (!binaryData || typeof binaryData !== 'object' || !binaryData.data || !binaryData.fileName || !binaryData.mimeType) {
+		if (
+			!binaryData ||
+			typeof binaryData !== 'object' ||
+			!binaryData.data ||
+			!binaryData.fileName ||
+			!binaryData.mimeType
+		) {
 			console.warn('Skipping invalid binary data object within the array:', binaryData);
 			continue; // Skip malformed objects
 		}
@@ -117,7 +139,11 @@ async function projectCreate(
 			console.log(`Added file to form: ${binaryData.fileName} (${binaryData.mimeType})`);
 		} catch (e) {
 			console.error(`Error processing binary file ${binaryData.fileName}: ${e.message}`);
-			throw new NodeOperationError(this.getNode(), `Failed to decode or append binary file: ${binaryData.fileName}`, { itemIndex: i });
+			throw new NodeOperationError(
+				this.getNode(),
+				`Failed to decode or append binary file: ${binaryData.fileName}`,
+				{ itemIndex: i },
+			);
 		}
 	}
 
@@ -134,7 +160,7 @@ async function projectCreate(
 		// Make the request
 		const response = await this.helpers.httpRequest({
 			method: 'POST',
-			url: `${baseUrl}/project`,
+			url: `${baseUrl}/project?app_source=n8n`,
 			body: form, // Pass the FormData object as the body
 			headers,
 		});
@@ -340,7 +366,10 @@ async function fileGet(
 		});
 
 		if (response.statusCode !== 200) {
-			throw new NodeOperationError(this.getNode(), `Request failed with status code ${response.statusCode}`);
+			throw new NodeOperationError(
+				this.getNode(),
+				`Request failed with status code ${response.statusCode}`,
+			);
 		}
 
 		// Get content type from headers
@@ -631,5 +660,3 @@ export class StrakerVerify implements INodeType {
 		return [returnData];
 	}
 }
-
-
