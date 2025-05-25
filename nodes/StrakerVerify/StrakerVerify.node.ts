@@ -65,12 +65,28 @@ async function projectCreate(
 ): Promise<any> {
 	// Get parameters
 	const title = this.getNodeParameter('title', i) as string;
-	const languages = this.getNodeParameter('languages', i) as string;
+	const languagesParam = this.getNodeParameter('languages', i) as Array<{ languageId: string }>;
 	const workflowId = this.getNodeParameter('workflowId', i) as string;
 	const confirmationRequired = this.getNodeParameter('confirmationRequired', i) as boolean;
 	const callbackUrl = this.getNodeParameter('callbackUrl', i) as string;
 	// Get the name of the property within item.binary that holds the array of file objects
 	const binaryProperty = this.getNodeParameter('binaryProperty', i, 'binary') as string;
+
+	// Extract language IDs from collection format
+	const languages = languagesParam
+		.map(item => item.languageId)
+		.filter(id => id && id.length > 0);
+
+	if (languages.length === 0) {
+		throw new NodeOperationError(
+			this.getNode(),
+			'At least one language must be provided.',
+			{ itemIndex: i },
+		);
+	}
+
+	this.logger.debug('Final languages array:', { languages });
+	this.logger.debug('Languages array length:', { length: languages.length });
 
 	// Check if the primary binary object and the specified property exist
 	if (!items[i].binary || typeof items[i].binary !== 'object') {
@@ -100,7 +116,14 @@ async function projectCreate(
 
 	// Add basic fields
 	form.append('title', title);
-	form.append('languages', languages);
+
+	// Handle languages array - use multiple fields with same name for proper array handling
+	if (languages && Array.isArray(languages)) {
+		for (let index = 0; index < languages.length; index++) {
+			form.append('languages', languages[index]);
+		}
+	}
+
 	form.append('confirmation_required', confirmationRequired ? 'true' : 'false');
 	form.append('callback_uri', callbackUrl);
 
@@ -109,9 +132,6 @@ async function projectCreate(
 	}
 
 	// Process the array of binary file objects
-	this.logger.debug(
-		`Processing ${binaryDataArray.length} file object(s) from property "${binaryProperty}".`,
-	);
 	for (const binaryData of binaryDataArray) {
 		// Validate the structure of each object in the array
 		if (
@@ -502,7 +522,7 @@ export class StrakerVerify implements INodeType {
 		const resource = this.getNodeParameter('resource', 0) as string;
 		const operation = this.getNodeParameter('operation', 0) as string;
 		const credentials = await this.getCredentials('strakerVerifyApi');
-		const baseUrl = (credentials.baseUrl as string) || 'https://api-verify.straker.ai/';
+		const baseUrl = (credentials.baseUrl as string) || 'https://api-verify.straker.ai';
 
 		// Add initial diagnostic logging
 		this.logger.debug('===== DEBUG: Node Execution Start =====');

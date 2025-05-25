@@ -109,8 +109,9 @@ export const projectFields: INodeProperties[] = [
 	{
 		displayName: 'Languages',
 		name: 'languages',
-		type: 'string',
-		default: '',
+		type: 'collection',
+		placeholder: 'Add Language',
+		default: {},
 		required: true,
 		displayOptions: {
 			show: {
@@ -118,7 +119,21 @@ export const projectFields: INodeProperties[] = [
 				operation: ['create'],
 			},
 		},
-		description: 'UUID of target language (e.g. "917FF728-0725-A033-1278-33025F49CA40")',
+		description: 'Target languages for the project',
+		options: [
+			{
+				displayName: 'Language ID',
+				name: 'languageId',
+				type: 'string',
+				default: '',
+				placeholder: '917FF728-0725-A033-1278-33025F49CA40',
+				description: 'UUID of the target language',
+			},
+		],
+		typeOptions: {
+			multipleValues: true,
+			multipleValueButtonText: 'Add Language',
+		},
 	},
 	{
 		displayName: 'Workflow ID',
