@@ -522,7 +522,7 @@ export class StrakerVerify implements INodeType {
 		const resource = this.getNodeParameter('resource', 0) as string;
 		const operation = this.getNodeParameter('operation', 0) as string;
 		const credentials = await this.getCredentials('strakerVerifyApi');
-		const baseUrl = (credentials.baseUrl as string) || 'https://api-verify.straker.ai';
+		const baseUrl = 'https://api-verify.straker.ai';
 
 		// Add initial diagnostic logging
 		this.logger.debug('===== DEBUG: Node Execution Start =====');

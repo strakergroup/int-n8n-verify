@@ -20,13 +20,6 @@ export class StrakerVerifyApi implements ICredentialType {
 			},
 			required: true,
 		},
-		{
-			displayName: 'Base URL',
-			name: 'baseUrl',
-			type: 'string',
-			default: 'https://api-verify.straker.ai',
-			description: 'The base URL of the Straker Verify API',
-		},
 	];
 
 	// This allows the credential to be used by other parts of n8n
@@ -42,7 +35,7 @@ export class StrakerVerifyApi implements ICredentialType {
 	// The block below tells how this credential can be tested
 	test: ICredentialTestRequest = {
 		request: {
-			baseURL: '={{$credentials.baseUrl}}',
+			baseURL: 'https://api-verify.straker.ai',
 			url: '/languages',
 			method: 'GET',
 		},
