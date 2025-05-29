@@ -107,11 +107,9 @@ export const projectFields: INodeProperties[] = [
 		description: 'Title of the project',
 	},
 	{
-		displayName: 'Languages',
+		displayName: 'Language Names or IDs',
 		name: 'languages',
-		type: 'collection',
-		placeholder: 'Add Language',
-		default: {},
+		type: 'multiOptions',
 		required: true,
 		displayOptions: {
 			show: {
@@ -119,34 +117,27 @@ export const projectFields: INodeProperties[] = [
 				operation: ['create'],
 			},
 		},
-		description: 'Target languages for the project',
-		options: [
-			{
-				displayName: 'Language ID',
-				name: 'languageId',
-				type: 'string',
-				default: '',
-				placeholder: '917FF728-0725-A033-1278-33025F49CA40',
-				description: 'UUID of the target language',
-			},
-		],
 		typeOptions: {
-			multipleValues: true,
-			multipleValueButtonText: 'Add Language',
+			loadOptionsMethod: 'getLanguages',
 		},
+		default: [],
+		description: 'Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>. Language Names or IDs. Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 	},
 	{
-		displayName: 'Workflow ID',
+		displayName: 'Workflow Name or ID',
 		name: 'workflowId',
-		type: 'string',
-		default: '',
+		type: 'options',
 		displayOptions: {
 			show: {
 				resource: ['project'],
 				operation: ['create'],
 			},
 		},
-		description: 'UUID of the workflow to use (optional)',
+		typeOptions: {
+			loadOptionsMethod: 'getWorkflows',
+		},
+		default: '',
+		description: 'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>. Workflow Name or ID. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 	},
 	{
 		displayName: 'Confirmation Required',

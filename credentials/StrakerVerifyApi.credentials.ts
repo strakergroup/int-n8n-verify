@@ -8,7 +8,7 @@ import {
 export class StrakerVerifyApi implements ICredentialType {
 	name = 'strakerVerifyApi';
 	displayName = 'Straker Verify API';
-	documentationUrl = 'https://strakerverify.docs.apiary.io';
+	documentationUrl = 'https://api-verify.straker.ai/docs';
 	properties: INodeProperties[] = [
 		{
 			displayName: 'API Key',
