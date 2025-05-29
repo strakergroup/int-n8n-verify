@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-straker-verify",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Straker Verify Integration for n8n",
   "keywords": [
     "n8n-community-node-package",
