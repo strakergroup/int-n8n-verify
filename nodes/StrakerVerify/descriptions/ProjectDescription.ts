@@ -156,7 +156,7 @@ export const projectFields: INodeProperties[] = [
 		displayName: 'Binary Property',
 		name: 'binaryProperty',
 		type: 'string',
-		default: 'binary', // Default to the structure seen in the screenshot
+		default: 'data',
 		required: true,
 		displayOptions: {
 			show: {

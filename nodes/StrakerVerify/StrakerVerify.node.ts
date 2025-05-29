@@ -80,15 +80,19 @@ async function projectCreate(
 	formData.append('title', title);
 	formData.append('workflow_id', workflowId);
 	formData.append('confirmation_required', String(confirm));
+
 	if (callbackUrl) {
 		formData.append('callback_uri', callbackUrl);
 	}
 
+	// Append each language as a separate 'languages' field
 	for (const lang of languagesArr) {
 		formData.append('languages', lang);
 	}
 
 	const items = this.getInputData();
+
+
 	for (let fileItemIndex = 0; fileItemIndex < items.length; fileItemIndex++) {
 		const bin = items[fileItemIndex].binary?.[binaryProp] as IBinaryData | undefined;
 		if (!bin)
@@ -104,6 +108,7 @@ async function projectCreate(
 		const blob = new Blob([buf], { type: contentType });
 
 		formData.append('files', blob, filename);
+
 	}
 
 	/* 3 · POST /project */
