@@ -140,19 +140,6 @@ export const projectFields: INodeProperties[] = [
 		description: 'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>. Workflow Name or ID. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 	},
 	{
-		displayName: 'Confirmation Required',
-		name: 'confirmationRequired',
-		type: 'boolean',
-		default: true,
-		displayOptions: {
-			show: {
-				resource: ['project'],
-				operation: ['create'],
-			},
-		},
-		description: 'Whether confirmation is required for the project',
-	},
-	{
 		displayName: 'Binary Property',
 		name: 'binaryProperty',
 		type: 'string',

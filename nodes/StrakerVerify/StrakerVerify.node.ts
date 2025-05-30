@@ -24,6 +24,48 @@ import {
 
 const BASE_URL = 'https://api-verify.straker.ai';
 
+const PROJECT_DETAILS_MAX_RETRIES = 3; // Max number of retries to get project details
+const PROJECT_DETAILS_RETRY_DELAY_MS = 3000; // Delay between retries in milliseconds (e.g., 3 seconds)
+
+// Helper function for delay
+async function delay(ms: number): Promise<void> {
+	return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Define interfaces for API responses
+interface ProjectCreateApiResponse { // Updated based on user feedback
+	project_id: string;
+	message: string;
+	// token_cost is NOT in this response anymore
+}
+
+// Interface for the 'data' part of GET /project/{id} response
+interface ProjectDetailsData {
+	uuid: string; // This is the project ID
+	client_uuid?: string;
+	title?: string;
+	status: string;
+	target_languages?: Array<any>; // Simplified for now
+	source_files?: Array<any>; // Simplified for now
+	archived?: boolean;
+	callback_uri?: string;
+	created_at?: string;
+	modified_at?: string;
+	// Add other fields from user's example if needed
+}
+
+// Interface for the full GET /project/{id} response
+interface ProjectGetResponse {
+	data: ProjectDetailsData;
+	token_cost?: number; // Mark as optional, as it might not be present if status is IN_PROGRESS
+}
+
+interface UserBalanceResponse { // Assumed structure for /user/balance response
+	balance: number;
+	// This might be nested, e.g. { data: { balance: number } }
+	// Adjust if the actual API response structure is different.
+}
+
 // Project operations
 async function projectGetAll(
 	this: IExecuteFunctions,
@@ -67,31 +109,28 @@ async function projectCreate(
 	const binaryProp   = this.getNodeParameter('binaryProperty', i, 'data') as string;
 	const languagesArr = this.getNodeParameter('languages', i)             as string[];
 	const workflowId   = this.getNodeParameter('workflowId', i)            as string;
-	const confirm      = this.getNodeParameter('confirmationRequired', i)  as boolean;
 	const callbackUrl  = this.getNodeParameter('callbackUrl', i, '')       as string;
 	const title        = this.getNodeParameter('title', i)                 as string;
 
 	if (languagesArr.length === 0)
 		throw new NodeOperationError(this.getNode(), 'At least one language is required.');
 
-	/* 2 · Build FormData payload */
+	/* 2 · Build FormData payload for project creation */
 	const formData = new FormData();
 
 	formData.append('title', title);
 	formData.append('workflow_id', workflowId);
-	formData.append('confirmation_required', String(confirm));
+	formData.append('confirmation_required', 'true'); // Project created requiring confirmation
 
 	if (callbackUrl) {
 		formData.append('callback_uri', callbackUrl);
 	}
 
-	// Append each language as a separate 'languages' field
 	for (const lang of languagesArr) {
 		formData.append('languages', lang);
 	}
 
 	const items = this.getInputData();
-
 
 	for (let fileItemIndex = 0; fileItemIndex < items.length; fileItemIndex++) {
 		const bin = items[fileItemIndex].binary?.[binaryProp] as IBinaryData | undefined;
@@ -108,44 +147,187 @@ async function projectCreate(
 		const blob = new Blob([buf], { type: contentType });
 
 		formData.append('files', blob, filename);
-
 	}
 
-	/* 3 · POST /project */
-	const response = await this.helpers.httpRequest(
+	/* 3 · POST /project to create it */
+	const creationApiResponse = await this.helpers.httpRequest(
 		{
 			method: 'POST',
 			url:    `${baseUrl}/project?app_source=n8n`,
 			headers: {
 				Authorization: `Bearer ${credentials.apiKey}`,
-				// 'Content-Type': 'multipart/form-data' will be set automatically by the helper
-				// when the body is a FormData object.
 			},
-			body: formData, // Pass FormData object directly
+			body: formData,
 		},
-	);
+	) as ProjectCreateApiResponse; // Updated interface
 
-	return this.helpers.returnJsonArray(response);
+	if (!creationApiResponse || !creationApiResponse.project_id) {
+		this.logger.error('Invalid response from project creation API or missing project_id.', { creationApiResponse });
+		throw new NodeOperationError(this.getNode(), 'Invalid response from project creation API or missing project_id.');
+	}
+
+	const newProjectId = creationApiResponse.project_id;
+	this.logger.info(`Project creation initiated. API Message: "${creationApiResponse.message}". Project ID: ${newProjectId}. Fetching details for token cost.`);
+
+	/* 4 · GET /project/{newProjectId} to fetch details including token_cost - with retries */
+	let projectDetails: ProjectGetResponse | undefined;
+	let tokenCost: number | undefined;
+	let attempts = 0;
+	let lastObservedStatus: string | undefined;
+
+	while (attempts < PROJECT_DETAILS_MAX_RETRIES && tokenCost === undefined) {
+		attempts++;
+		try {
+			this.logger.debug(`Attempt ${attempts}/${PROJECT_DETAILS_MAX_RETRIES} to fetch details for project ${newProjectId}...`);
+			const currentDetails = await this.helpers.httpRequest({
+				method: 'GET',
+				url: `${baseUrl}/project/${newProjectId}`,
+				headers: {
+					Authorization: `Bearer ${credentials.apiKey}`,
+					'Accept': 'application/json',
+				},
+			}) as ProjectGetResponse;
+
+			projectDetails = currentDetails; // Store the latest details fetched
+			console.log(`CONSOLE DEBUG (Attempt ${attempts}): Raw project details for ${newProjectId}:`, JSON.stringify(projectDetails, null, 2));
+
+			if (projectDetails && projectDetails.data) {
+				lastObservedStatus = projectDetails.data.status;
+				if (typeof projectDetails.token_cost === 'number') {
+					tokenCost = projectDetails.token_cost;
+					this.logger.info(`Successfully fetched token_cost (${tokenCost}) for project ${newProjectId} on attempt ${attempts}. Status: '${lastObservedStatus}'.`);
+					break; // Exit loop, token_cost found
+				} else if (projectDetails.data.status === 'IN_PROGRESS' || projectDetails.data.status === 'PENDING_ANALYSIS') { // Add other relevant transient statuses if needed
+					this.logger.warn(`Attempt ${attempts}/${PROJECT_DETAILS_MAX_RETRIES}: token_cost not yet available for project ${newProjectId}. Status: '${lastObservedStatus}'.`);
+					if (attempts < PROJECT_DETAILS_MAX_RETRIES) {
+						this.logger.info(`Retrying in ${PROJECT_DETAILS_RETRY_DELAY_MS / 1000}s...`);
+						await delay(PROJECT_DETAILS_RETRY_DELAY_MS);
+					}
+				} else {
+					// Status is not IN_PROGRESS/PENDING_ANALYSIS, and token_cost is still missing. Unlikely to appear with more retries.
+					this.logger.warn(`Attempt ${attempts}/${PROJECT_DETAILS_MAX_RETRIES}: token_cost not available for project ${newProjectId}. Status: '${lastObservedStatus}'. Not a known transient status, will not retry further.`);
+					break; // Exit loop
+				}
+			} else {
+				// projectDetails or projectDetails.data is missing - this is unexpected
+				this.logger.error(`Attempt ${attempts}/${PROJECT_DETAILS_MAX_RETRIES}: Invalid project details structure received for ${newProjectId}.`, { projectDetailsResponse: projectDetails });
+				break; // Exit loop
+			}
+		} catch (getDetailsError) {
+			this.logger.error(`Attempt ${attempts}/${PROJECT_DETAILS_MAX_RETRIES}: API error fetching project details for project ${newProjectId}:`, { message: getDetailsError.message, stack: getDetailsError.stack });
+			if (attempts < PROJECT_DETAILS_MAX_RETRIES) {
+				this.logger.info(`Retrying in ${PROJECT_DETAILS_RETRY_DELAY_MS / 1000}s...`);
+				await delay(PROJECT_DETAILS_RETRY_DELAY_MS);
+			} else {
+				// Last attempt failed with an API error
+				return this.helpers.returnJsonArray({
+					creation_response: creationApiResponse,
+					confirmation_status: 'api_error_fetching_project_details_after_retries',
+					error_message: `API error fetching details for project ${newProjectId} after ${attempts} attempts: ${getDetailsError.message}`,
+					attempt_details: { attempts, error: getDetailsError.message },
+				});
+			}
+		}
+	}
+
+	// After the loop, check if tokenCost was successfully retrieved
+	if (typeof tokenCost !== 'number' || !projectDetails || !projectDetails.data) {
+		const finalStatus = projectDetails?.data?.status || lastObservedStatus || 'unknown';
+		const errorMessage = `Failed to retrieve a valid 'token_cost' for project ${newProjectId} after ${attempts} attempts. Final observed status: '${finalStatus}'.`;
+		this.logger.error(errorMessage, { projectDetailsResponse: projectDetails, attemptsMade: attempts });
+		console.error(`CONSOLE ERROR: ${errorMessage} Last received details:`, JSON.stringify(projectDetails, null, 2));
+		return this.helpers.returnJsonArray({
+			creation_response: creationApiResponse,
+			project_final_status: finalStatus,
+			confirmation_status: 'failed_to_get_token_cost_after_retries',
+			error_message: errorMessage,
+			raw_project_details_last_attempt: projectDetails,
+			attempts_made: attempts,
+		});
+	}
+
+	// All good: projectDetails, projectDetails.data, and tokenCost are valid.
+	this.logger.info(`Project ${newProjectId} details finalized. Token cost: ${tokenCost}. Status: '${projectDetails.data.status}'. Proceeding with balance check.`);
+
+	/* 5 · Check balance and attempt confirmation */
+	try {
+		const balanceResponse = await userGetMe.call(this, i, baseUrl, credentials) as UserBalanceResponse;
+
+		if (balanceResponse === null || typeof balanceResponse.balance !== 'number') {
+			this.logger.warn(`Could not determine user balance for project ${newProjectId}. Project will not be confirmed by node.`, { balanceResponse });
+			return this.helpers.returnJsonArray({
+				creation_response: creationApiResponse,
+				project_details: projectDetails,
+				confirmation_status: 'failed_to_get_balance',
+				error_message: 'Could not retrieve or parse user balance from API.',
+			});
+		}
+		const userBalance = balanceResponse.balance;
+		this.logger.debug(`User balance: ${userBalance}. Required for project ${newProjectId}: ${tokenCost}.`);
+
+		if (userBalance >= tokenCost) {
+			this.logger.info(`Sufficient balance (${userBalance}). Attempting to confirm project ${newProjectId} via node.`);
+			try {
+				const confirmationResponse = await projectConfirm.call(this, i, baseUrl, credentials, newProjectId);
+				this.logger.info(`Project ${newProjectId} confirmed successfully by node.`);
+				return this.helpers.returnJsonArray({
+					creation_response: creationApiResponse,
+					project_details: projectDetails,
+					confirmation_status: 'confirmed_by_node',
+					confirmation_api_response: confirmationResponse,
+					user_balance_at_confirmation: userBalance,
+				});
+			} catch (confirmError) {
+				this.logger.error(`Error during node attempt to confirm project ${newProjectId}:`, { message: confirmError.message, stack: confirmError.stack });
+				return this.helpers.returnJsonArray({
+					creation_response: creationApiResponse,
+					project_details: projectDetails,
+					confirmation_status: 'confirmation_failed_by_node_despite_sufficient_balance',
+					confirmation_error: confirmError.message,
+					user_balance_at_confirmation_attempt: userBalance,
+				});
+			}
+		} else {
+			this.logger.warn(`Insufficient balance (${userBalance}) for project ${newProjectId} (cost: ${tokenCost}). Project created but not confirmed by node.`);
+			return this.helpers.returnJsonArray({
+				creation_response: creationApiResponse,
+				project_details: projectDetails,
+				confirmation_status: 'skipped_insufficient_balance_node_check',
+				user_balance: userBalance,
+				required_tokens: tokenCost,
+			});
+		}
+	} catch (balanceError) {
+		this.logger.error(`Error fetching user balance for project ${newProjectId}:`, { message: balanceError.message, stack: balanceError.stack });
+		return this.helpers.returnJsonArray({
+			creation_response: creationApiResponse,
+			project_details: projectDetails, // May be undefined if error was before fetching details
+			confirmation_status: 'failed_to_get_balance_before_confirmation_attempt',
+			error_message: `Error fetching user balance: ${balanceError.message}`,
+		});
+	}
 }
 
 async function projectConfirm(
 	this: IExecuteFunctions,
-	i: number,
+	_i: number, // Item index i is not strictly needed here if projectIdToConfirm is passed
 	baseUrl: string,
 	credentials: IDataObject,
+	projectIdToConfirm: string, // Added projectId as a direct argument
 ): Promise<any> {
-	const projectId = this.getNodeParameter('projectId', i) as string;
+	// const projectId = this.getNodeParameter('projectId', i) as string; // Old way: get from node params
+
+	const body = new URLSearchParams();
+	body.append('project_id', projectIdToConfirm);
 
 	return await this.helpers.httpRequest({
 		method: 'POST',
 		url: `${baseUrl}/project/confirm`,
 		headers: {
 			Authorization: `Bearer ${credentials.apiKey}`,
-			'Content-Type': 'application/json',
+			'Content-Type': 'application/x-www-form-urlencoded', // Align with user's cURL
 		},
-		body: {
-			projectId,
-		},
+		body: body.toString(), // Send as URL-encoded string
 	});
 }
 
@@ -517,7 +699,10 @@ export class StrakerVerify implements INodeType {
 									responseData = await projectGet.call(this, i, BASE_URL, credentials);
 									break;
 								case 'confirm':
-									responseData = await projectConfirm.call(this, i, BASE_URL, credentials);
+									// For the general 'confirm' operation (not the one inside projectCreate)
+									// it should still get projectId from parameters.
+									const projectIdToConfirm = this.getNodeParameter('projectId', i) as string;
+									responseData = await projectConfirm.call(this, i, BASE_URL, credentials, projectIdToConfirm);
 									break;
 								case 'getSegments':
 									responseData = await projectGetSegments.call(this, i, BASE_URL, credentials);
