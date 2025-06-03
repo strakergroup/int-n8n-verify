@@ -24,19 +24,9 @@ import {
 
 const BASE_URL = 'https://api-verify.straker.ai';
 
-const PROJECT_DETAILS_MAX_RETRIES = 3; // Max number of retries to get project details
-const PROJECT_DETAILS_RETRY_DELAY_MS = 3000; // Delay between retries in milliseconds (e.g., 3 seconds)
-
 // Helper function for delay
 async function delay(ms: number): Promise<void> {
-	return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-// Define interfaces for API responses
-interface ProjectCreateApiResponse { // Updated based on user feedback
-	project_id: string;
-	message: string;
-	// token_cost is NOT in this response anymore
+	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // Interface for the 'data' part of GET /project/{id} response
@@ -60,10 +50,9 @@ interface ProjectGetResponse {
 	token_cost?: number; // Mark as optional, as it might not be present if status is IN_PROGRESS
 }
 
-interface UserBalanceResponse { // Assumed structure for /user/balance response
-	balance: number;
-	// This might be nested, e.g. { data: { balance: number } }
-	// Adjust if the actual API response structure is different.
+interface ProjectCreateApiResponse {
+	project_id: string;
+	message: string;
 }
 
 // Project operations
@@ -99,39 +88,56 @@ async function projectGet(
 	});
 }
 
-async function projectCreate(
+async function waitForPendingPayment(
+	this: IExecuteFunctions,
+	baseUrl: string,
+	projectId: string,
+	credentials: IDataObject,
+	maxRetries = 6,
+	pauseMs = 5_000,
+) {
+	let lastResponse: ProjectGetResponse | null = null;
+	for (let n = 0; n < maxRetries; n++) {
+		const res = await this.helpers.httpRequest({
+			method: 'GET',
+			url: `${baseUrl}/project/${projectId}`,
+			headers: { Authorization: `Bearer ${credentials.apiKey}` },
+		}) as ProjectGetResponse;
+		// If status is PENDING_TOKEN_PAYMENT or already COMPLETED, return the response
+		if (res.data.status === 'PENDING_TOKEN_PAYMENT') {
+			this.logger.debug(`waitForPendingPayment: Exiting loop. Status is ${res.data.status}.`, { projectDetails: res.data });
+			return res;
+		}
+		lastResponse = res; // Store the last response
+		await delay(pauseMs);
+	}
+	// If loop finishes, status was not reached
+	this.logger.error('waitForPendingPayment timeout. Last project details:', { projectDetails: lastResponse });
+	throw new NodeOperationError(
+		this.getNode(),
+		`Status never reached PENDING_TOKEN_PAYMENT or COMPLETED after ${maxRetries} checks. Last status: ${lastResponse?.data?.status}`,
+	);
+}
+
+export async function projectCreate(
 	this: IExecuteFunctions,
 	i: number,
 	baseUrl: string,
 	credentials: IDataObject,
 ): Promise<INodeExecutionData[]> {
-	/* 1 · Node parameters */
 	const binaryProp   = this.getNodeParameter('binaryProperty', i, 'data') as string;
-	const languagesArr = this.getNodeParameter('languages', i)             as string[];
-	const workflowId   = this.getNodeParameter('workflowId', i)            as string;
-	const callbackUrl  = this.getNodeParameter('callbackUrl', i, '')       as string;
-	const title        = this.getNodeParameter('title', i)                 as string;
+	const languagesArr = this.getNodeParameter('languages',      i)         as string[];
+	const workflowId   = this.getNodeParameter('workflowId',     i)         as string;
+	const callbackUrl  = this.getNodeParameter('callbackUrl',    i, '')     as string;
+	const title        = this.getNodeParameter('title',          i)         as string;
 
-	if (languagesArr.length === 0)
+	if (!languagesArr.length)
 		throw new NodeOperationError(this.getNode(), 'At least one language is required.');
 
-	/* 2 · Build FormData payload for project creation */
-	const formData = new FormData();
-
-	formData.append('title', title);
-	formData.append('workflow_id', workflowId);
-	formData.append('confirmation_required', 'true'); // Project created requiring confirmation
-
-	if (callbackUrl) {
-		formData.append('callback_uri', callbackUrl);
-	}
-
-	for (const lang of languagesArr) {
-		formData.append('languages', lang);
-	}
-
 	const items = this.getInputData();
+	const form  = new FormData();
 
+	// 1. Append files
 	for (let fileItemIndex = 0; fileItemIndex < items.length; fileItemIndex++) {
 		const bin = items[fileItemIndex].binary?.[binaryProp] as IBinaryData | undefined;
 		if (!bin)
@@ -146,167 +152,126 @@ async function projectCreate(
 		const contentType = bin.mimeType  ?? 'application/octet-stream';
 		const blob = new Blob([buf], { type: contentType });
 
-		formData.append('files', blob, filename);
+		form.append('files', blob, filename);
 	}
 
-	/* 3 · POST /project to create it */
-	const creationApiResponse = await this.helpers.httpRequest(
-		{
-			method: 'POST',
-			url:    `${baseUrl}/project?app_source=n8n`,
-			headers: {
-				Authorization: `Bearer ${credentials.apiKey}`,
-			},
-			body: formData,
+	// 2. Append languages
+	for (const lng of languagesArr) form.append('languages', lng);
+
+	// 3. Append title
+	form.append('title', title);
+
+	// 4. Append workflow_id
+	form.append('workflow_id', workflowId);
+
+	// 5. Append callback_uri
+	form.append('callback_uri', callbackUrl);
+
+	const url = `${baseUrl}/project?app_source=n8n`;
+
+	/* 3 · POST /project */
+	const creation = await this.helpers.httpRequest({
+		method: 'POST',
+		url,
+		headers: {
+			Authorization: `Bearer ${credentials.apiKey}`,
+			'Content-Type': 'multipart/form-data',
 		},
-	) as ProjectCreateApiResponse; // Updated interface
+		body: form,
+	}) as ProjectCreateApiResponse;
+	const projectId = creation.project_id as string | undefined;
 
-	if (!creationApiResponse || !creationApiResponse.project_id) {
-		this.logger.error('Invalid response from project creation API or missing project_id.', { creationApiResponse });
-		throw new NodeOperationError(this.getNode(), 'Invalid response from project creation API or missing project_id.');
-	}
+	// Log the initial creation response
+	this.logger.debug('Initial project creation API response:', { creationResponse: creation });
 
-	const newProjectId = creationApiResponse.project_id;
-	this.logger.info(`Project creation initiated. API Message: "${creationApiResponse.message}". Project ID: ${newProjectId}. Fetching details for token cost.`);
+	if (!projectId)
+		throw new NodeOperationError(this.getNode(), 'Missing project_id in response.');
 
-	/* 4 · GET /project/{newProjectId} to fetch details including token_cost - with retries */
-	let projectDetails: ProjectGetResponse | undefined;
-	let tokenCost: number | undefined;
-	let attempts = 0;
-	let lastObservedStatus: string | undefined;
+	/* 4 · Wait for PENDING_TOKEN_PAYMENT or COMPLETED */
+	const pending = await waitForPendingPayment.call(
+		this,
+		baseUrl,
+		projectId,
+		credentials,
+	);
 
-	while (attempts < PROJECT_DETAILS_MAX_RETRIES && tokenCost === undefined) {
-		attempts++;
-		try {
-			this.logger.debug(`Attempt ${attempts}/${PROJECT_DETAILS_MAX_RETRIES} to fetch details for project ${newProjectId}...`);
-			const currentDetails = await this.helpers.httpRequest({
-				method: 'GET',
-				url: `${baseUrl}/project/${newProjectId}`,
-				headers: {
-					Authorization: `Bearer ${credentials.apiKey}`,
-					'Accept': 'application/json',
-				},
-			}) as ProjectGetResponse;
-
-			projectDetails = currentDetails; // Store the latest details fetched
-			console.log(`CONSOLE DEBUG (Attempt ${attempts}): Raw project details for ${newProjectId}:`, JSON.stringify(projectDetails, null, 2));
-
-			if (projectDetails && projectDetails.data) {
-				lastObservedStatus = projectDetails.data.status;
-				if (typeof projectDetails.token_cost === 'number') {
-					tokenCost = projectDetails.token_cost;
-					this.logger.info(`Successfully fetched token_cost (${tokenCost}) for project ${newProjectId} on attempt ${attempts}. Status: '${lastObservedStatus}'.`);
-					break; // Exit loop, token_cost found
-				} else if (projectDetails.data.status === 'IN_PROGRESS' || projectDetails.data.status === 'PENDING_ANALYSIS') { // Add other relevant transient statuses if needed
-					this.logger.warn(`Attempt ${attempts}/${PROJECT_DETAILS_MAX_RETRIES}: token_cost not yet available for project ${newProjectId}. Status: '${lastObservedStatus}'.`);
-					if (attempts < PROJECT_DETAILS_MAX_RETRIES) {
-						this.logger.info(`Retrying in ${PROJECT_DETAILS_RETRY_DELAY_MS / 1000}s...`);
-						await delay(PROJECT_DETAILS_RETRY_DELAY_MS);
-					}
-				} else {
-					// Status is not IN_PROGRESS/PENDING_ANALYSIS, and token_cost is still missing. Unlikely to appear with more retries.
-					this.logger.warn(`Attempt ${attempts}/${PROJECT_DETAILS_MAX_RETRIES}: token_cost not available for project ${newProjectId}. Status: '${lastObservedStatus}'. Not a known transient status, will not retry further.`);
-					break; // Exit loop
-				}
-			} else {
-				// projectDetails or projectDetails.data is missing - this is unexpected
-				this.logger.error(`Attempt ${attempts}/${PROJECT_DETAILS_MAX_RETRIES}: Invalid project details structure received for ${newProjectId}.`, { projectDetailsResponse: projectDetails });
-				break; // Exit loop
-			}
-		} catch (getDetailsError) {
-			this.logger.error(`Attempt ${attempts}/${PROJECT_DETAILS_MAX_RETRIES}: API error fetching project details for project ${newProjectId}:`, { message: getDetailsError.message, stack: getDetailsError.stack });
-			if (attempts < PROJECT_DETAILS_MAX_RETRIES) {
-				this.logger.info(`Retrying in ${PROJECT_DETAILS_RETRY_DELAY_MS / 1000}s...`);
-				await delay(PROJECT_DETAILS_RETRY_DELAY_MS);
-			} else {
-				// Last attempt failed with an API error
-				return this.helpers.returnJsonArray({
-					creation_response: creationApiResponse,
-					confirmation_status: 'api_error_fetching_project_details_after_retries',
-					error_message: `API error fetching details for project ${newProjectId} after ${attempts} attempts: ${getDetailsError.message}`,
-					attempt_details: { attempts, error: getDetailsError.message },
-				});
-			}
-		}
-	}
-
-	// After the loop, check if tokenCost was successfully retrieved
-	if (typeof tokenCost !== 'number' || !projectDetails || !projectDetails.data) {
-		const finalStatus = projectDetails?.data?.status || lastObservedStatus || 'unknown';
-		const errorMessage = `Failed to retrieve a valid 'token_cost' for project ${newProjectId} after ${attempts} attempts. Final observed status: '${finalStatus}'.`;
-		this.logger.error(errorMessage, { projectDetailsResponse: projectDetails, attemptsMade: attempts });
-		console.error(`CONSOLE ERROR: ${errorMessage} Last received details:`, JSON.stringify(projectDetails, null, 2));
+	// If project is already COMPLETED, skip payment and confirmation
+	if (pending.data.status === 'COMPLETED') {
+		this.logger.debug('Project is already COMPLETED. Skipping balance check and confirmation.', { projectDetails: pending.data });
 		return this.helpers.returnJsonArray({
-			creation_response: creationApiResponse,
-			project_final_status: finalStatus,
-			confirmation_status: 'failed_to_get_token_cost_after_retries',
-			error_message: errorMessage,
-			raw_project_details_last_attempt: projectDetails,
-			attempts_made: attempts,
+			creation: {
+				project_id: creation.project_id,
+				message: creation.message,
+				status: 'COMPLETED',
+			},
+			project_details: pending.data, // Return full project details as received
 		});
 	}
 
-	// All good: projectDetails, projectDetails.data, and tokenCost are valid.
-	this.logger.info(`Project ${newProjectId} details finalized. Token cost: ${tokenCost}. Status: '${projectDetails.data.status}'. Proceeding with balance check.`);
+	// If PENDING_TOKEN_PAYMENT, proceed with token cost, balance check, and confirmation
+	// Ensure token_cost is present when status is PENDING_TOKEN_PAYMENT
+	const tokenCost = pending.token_cost as number | undefined;
 
-	/* 5 · Check balance and attempt confirmation */
-	try {
-		const balanceResponse = await userGetMe.call(this, i, baseUrl, credentials) as UserBalanceResponse;
+	if (tokenCost === undefined) {
+		this.logger.error('Token cost is undefined, but project status is PENDING_TOKEN_PAYMENT. This is unexpected.', { pendingResponse: pending });
+		throw new NodeOperationError(this.getNode(), 'Token cost is unexpectedly undefined for a project pending payment. Project might have moved to a different state or API response is missing data.');
+	}
 
-		if (balanceResponse === null || typeof balanceResponse.balance !== 'number') {
-			this.logger.warn(`Could not determine user balance for project ${newProjectId}. Project will not be confirmed by node.`, { balanceResponse });
-			return this.helpers.returnJsonArray({
-				creation_response: creationApiResponse,
-				project_details: projectDetails,
-				confirmation_status: 'failed_to_get_balance',
-				error_message: 'Could not retrieve or parse user balance from API.',
-			});
-		}
-		const userBalance = balanceResponse.balance;
-		this.logger.debug(`User balance: ${userBalance}. Required for project ${newProjectId}: ${tokenCost}.`);
+	/* 5 · Balance check */
+	const me      = await userGetMe.call(this, 0, baseUrl, credentials);
+	const balance = me.balance as number | undefined;
 
-		if (userBalance >= tokenCost) {
-			this.logger.info(`Sufficient balance (${userBalance}). Attempting to confirm project ${newProjectId} via node.`);
-			try {
-				const confirmationResponse = await projectConfirm.call(this, i, baseUrl, credentials, newProjectId);
-				this.logger.info(`Project ${newProjectId} confirmed successfully by node.`);
-				return this.helpers.returnJsonArray({
-					creation_response: creationApiResponse,
-					project_details: projectDetails,
-					confirmation_status: 'confirmed_by_node',
-					confirmation_api_response: confirmationResponse,
-					user_balance_at_confirmation: userBalance,
-				});
-			} catch (confirmError) {
-				this.logger.error(`Error during node attempt to confirm project ${newProjectId}:`, { message: confirmError.message, stack: confirmError.stack });
-				return this.helpers.returnJsonArray({
-					creation_response: creationApiResponse,
-					project_details: projectDetails,
-					confirmation_status: 'confirmation_failed_by_node_despite_sufficient_balance',
-					confirmation_error: confirmError.message,
-					user_balance_at_confirmation_attempt: userBalance,
-				});
-			}
-		} else {
-			this.logger.warn(`Insufficient balance (${userBalance}) for project ${newProjectId} (cost: ${tokenCost}). Project created but not confirmed by node.`);
-			return this.helpers.returnJsonArray({
-				creation_response: creationApiResponse,
-				project_details: projectDetails,
-				confirmation_status: 'skipped_insufficient_balance_node_check',
-				user_balance: userBalance,
-				required_tokens: tokenCost,
-			});
-		}
-	} catch (balanceError) {
-		this.logger.error(`Error fetching user balance for project ${newProjectId}:`, { message: balanceError.message, stack: balanceError.stack });
+	if (balance === undefined)
 		return this.helpers.returnJsonArray({
-			creation_response: creationApiResponse,
-			project_details: projectDetails, // May be undefined if error was before fetching details
-			confirmation_status: 'failed_to_get_balance_before_confirmation_attempt',
-			error_message: `Error fetching user balance: ${balanceError.message}`,
+			creation: {
+				project_id: creation.project_id,
+				message: creation.message,
+			},
+			pending: {
+				data: pending.data,
+				token_cost: pending.token_cost,
+			},
+			confirmation_status: 'missing_balance'
+		});
+
+	if (balance < tokenCost)
+		return this.helpers.returnJsonArray({
+			creation: {
+				project_id: creation.project_id,
+				message: creation.message,
+			},
+			balance,
+			tokenCost
+		});
+
+	/* 6 · Confirm project */
+	try {
+		const confirmation_status = await projectConfirm.call(
+			this,
+			0,
+			baseUrl,
+			credentials,
+			projectId,
+		);
+		return this.helpers.returnJsonArray({
+			creation: {
+				project_id: creation.project_id,
+				message: creation.message,
+			},
+			confirmation_status,
+		});
+	} catch (error) {
+		this.logger.error('Error confirming project:', { error });
+		return this.helpers.returnJsonArray({
+			creation: {
+				project_id: creation.project_id,
+				message: creation.message,
+			},
+			error: error.message,
 		});
 	}
 }
+
 
 async function projectConfirm(
 	this: IExecuteFunctions,
@@ -314,13 +279,13 @@ async function projectConfirm(
 	baseUrl: string,
 	credentials: IDataObject,
 	projectIdToConfirm: string, // Added projectId as a direct argument
-): Promise<any> {
+): Promise<string> {
 	// const projectId = this.getNodeParameter('projectId', i) as string; // Old way: get from node params
 
 	const body = new URLSearchParams();
 	body.append('project_id', projectIdToConfirm);
 
-	return await this.helpers.httpRequest({
+	const response = await this.helpers.httpRequest({
 		method: 'POST',
 		url: `${baseUrl}/project/confirm`,
 		headers: {
@@ -329,6 +294,8 @@ async function projectConfirm(
 		},
 		body: body.toString(), // Send as URL-encoded string
 	});
+
+	return response.body;
 }
 
 async function projectGetSegments(
@@ -418,6 +385,7 @@ async function userGetMe(
 		url: `${baseUrl}/user/balance`,
 		headers: {
 			Authorization: `Bearer ${credentials.apiKey}`,
+			'Accept': 'application/json',
 		},
 	});
 }
@@ -584,13 +552,13 @@ export class StrakerVerify implements INodeType {
 				this.logger.debug(`API Key for workflows: ${apiKey ? 'Loaded' : 'MISSING'}`);
 
 				try {
-					const response = await this.helpers.httpRequest({
+					const response = (await this.helpers.httpRequest({
 						method: 'GET',
 						url: `${BASE_URL}/workflow`,
 						headers: {
 							Authorization: `Bearer ${apiKey}`,
 						},
-					}) as { workflows: Array<{ id: string; name: string }> }; // Added type assertion
+					})) as { workflows: Array<{ id: string; name: string }> }; // Added type assertion
 					this.logger.debug('Raw workflows API response:', { data: response });
 
 					const workflowsArray = response.workflows; // Access the nested array
@@ -605,10 +573,15 @@ export class StrakerVerify implements INodeType {
 						this.logger.debug('Mapped workflows:', { data: mappedWorkflows });
 						return mappedWorkflows;
 					}
-					this.logger.warn('Workflows data (inside response.workflows) was not an array.', { response });
+					this.logger.warn('Workflows data (inside response.workflows) was not an array.', {
+						response,
+					});
 					return [];
 				} catch (error) {
-					this.logger.error('Error loading workflows:', { error: error.message, stack: error.stack });
+					this.logger.error('Error loading workflows:', {
+						error: error.message,
+						stack: error.stack,
+					});
 					return [];
 				}
 			},
@@ -619,13 +592,13 @@ export class StrakerVerify implements INodeType {
 				this.logger.debug(`API Key for languages: ${apiKey ? 'Loaded' : 'MISSING'}`);
 
 				try {
-					const response = await this.helpers.httpRequest({
+					const response = (await this.helpers.httpRequest({
 						method: 'GET',
 						url: `${BASE_URL}/languages`,
 						headers: {
 							Authorization: `Bearer ${apiKey}`,
 						},
-					}) as { data: Array<{ id: string; name: string; code?: string }> }; // Added type assertion
+					})) as { data: Array<{ id: string; name: string; code?: string }> }; // Added type assertion
 					this.logger.debug('Raw languages API response:', { data: response });
 
 					const languagesArray = response.data; // Access the nested array
@@ -643,7 +616,10 @@ export class StrakerVerify implements INodeType {
 					this.logger.warn('Languages data (inside response.data) was not an array.', { response });
 					return [];
 				} catch (error) {
-					this.logger.error('Error loading languages:', { error: error.message, stack: error.stack });
+					this.logger.error('Error loading languages:', {
+						error: error.message,
+						stack: error.stack,
+					});
 					return [];
 				}
 			},
@@ -659,7 +635,9 @@ export class StrakerVerify implements INodeType {
 		const credentials = await this.getCredentials('strakerVerifyApi');
 
 		this.logger.debug('===== DEBUG: Node Execution Start =====');
-		this.logger.debug(`Resource: ${resource}, Operation: ${operation}, Input Items: ${items.length}`);
+		this.logger.debug(
+			`Resource: ${resource}, Operation: ${operation}, Input Items: ${items.length}`,
+		);
 
 		if (resource === 'project' && operation === 'create') {
 			this.logger.debug('Executing projectCreate once for all items.');
@@ -671,7 +649,10 @@ export class StrakerVerify implements INodeType {
 				returnData = projectCreateResult;
 				this.logger.debug('projectCreate successful', { responseDataCount: returnData.length });
 			} catch (error) {
-				this.logger.error('Error during single projectCreate call:', { message: error.message, stack: error.stack });
+				this.logger.error('Error during single projectCreate call:', {
+					message: error.message,
+					stack: error.stack,
+				});
 				if (this.continueOnFail()) {
 					// Provide a single error output for the failed batch operation
 					returnData.push({ json: { error: error.message }, pairedItem: { item: 0 } }); // Or no pairedItem
@@ -702,7 +683,13 @@ export class StrakerVerify implements INodeType {
 									// For the general 'confirm' operation (not the one inside projectCreate)
 									// it should still get projectId from parameters.
 									const projectIdToConfirm = this.getNodeParameter('projectId', i) as string;
-									responseData = await projectConfirm.call(this, i, BASE_URL, credentials, projectIdToConfirm);
+									responseData = await projectConfirm.call(
+										this,
+										i,
+										BASE_URL,
+										credentials,
+										projectIdToConfirm,
+									);
 									break;
 								case 'getSegments':
 									responseData = await projectGetSegments.call(this, i, BASE_URL, credentials);
@@ -752,7 +739,13 @@ export class StrakerVerify implements INodeType {
 								case 'get':
 									// fileGet takes _items: INodeExecutionData[], which it might use for context if needed,
 									// but primarily uses 'i' for node parameters specific to the item context.
-									singleItemExecutionData = await fileGet.call(this, i, BASE_URL, items, credentials);
+									singleItemExecutionData = await fileGet.call(
+										this,
+										i,
+										BASE_URL,
+										items,
+										credentials,
+									);
 									break;
 								default:
 									throw new NodeOperationError(
@@ -774,19 +767,31 @@ export class StrakerVerify implements INodeType {
 						returnData.push(singleItemExecutionData);
 					} else if (responseData !== undefined) {
 						// Check if responseData is already INodeExecutionData[] (some helpers might do this)
-						if (Array.isArray(responseData) && responseData.length > 0 && typeof responseData[0] === 'object' && responseData[0] !== null && 'json' in responseData[0]) {
+						if (
+							Array.isArray(responseData) &&
+							responseData.length > 0 &&
+							typeof responseData[0] === 'object' &&
+							responseData[0] !== null &&
+							'json' in responseData[0]
+						) {
 							// If it's already in the expected format (array of INodeExecutionData-like objects)
-							returnData.push(...responseData.map(data => ({ ...data, pairedItem: { item: i } })));
+							returnData.push(
+								...responseData.map((data) => ({ ...data, pairedItem: { item: i } })),
+							);
 						} else {
 							// Otherwise, wrap it as standard { json: responseData }
 							returnData.push({ json: responseData, pairedItem: { item: i } });
 						}
 					} else {
-						this.logger.warn(`No response data or execution data produced for item ${i}, resource "${resource}", operation "${operation}"`);
+						this.logger.warn(
+							`No response data or execution data produced for item ${i}, resource "${resource}", operation "${operation}"`,
+						);
 					}
-
 				} catch (error) {
-					this.logger.error(`Error processing item ${i} for ${resource}/${operation}:`, { message: error.message, stack: error.stack });
+					this.logger.error(`Error processing item ${i} for ${resource}/${operation}:`, {
+						message: error.message,
+						stack: error.stack,
+					});
 					if (this.continueOnFail()) {
 						returnData.push({
 							json: {
