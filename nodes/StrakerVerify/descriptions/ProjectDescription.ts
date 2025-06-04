@@ -127,6 +127,7 @@ export const projectFields: INodeProperties[] = [
 		displayName: 'Workflow Name or ID',
 		name: 'workflowId',
 		type: 'options',
+		required: true,
 		displayOptions: {
 			show: {
 				resource: ['project'],
