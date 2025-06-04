@@ -22,7 +22,7 @@ import {
 	fileFields,
 } from './descriptions';
 
-const BASE_URL = 'https://uat-api-verify.straker.ai';
+const BASE_URL = 'https://api-verify.straker.ai';
 
 // Helper function for delay
 async function delay(ms: number): Promise<void> {

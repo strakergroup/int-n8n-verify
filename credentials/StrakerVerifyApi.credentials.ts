@@ -35,7 +35,7 @@ export class StrakerVerifyApi implements ICredentialType {
 	// The block below tells how this credential can be tested
 	test: ICredentialTestRequest = {
 		request: {
-			baseURL: 'https://uat-api-verify.straker.ai',
+			baseURL: 'https://api-verify.straker.ai',
 			url: '/languages',
 			method: 'GET',
 		},
