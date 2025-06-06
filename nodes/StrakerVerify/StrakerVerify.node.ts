@@ -21,38 +21,13 @@ import {
 	fileOperations,
 	fileFields,
 } from './descriptions';
+import { Language, ProjectCreateApiResponse, ProjectGetResponse, Workflow } from './types';
 
-const BASE_URL = 'https://api-verify.straker.ai';
+const BASE_URL = process.env.STRAKER_API_URL || 'https://api-verify.straker.ai';
 
 // Helper function for delay
 async function delay(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-// Interface for the 'data' part of GET /project/{id} response
-interface ProjectDetailsData {
-	uuid: string; // This is the project ID
-	client_uuid?: string;
-	title?: string;
-	status: string;
-	target_languages?: Array<any>; // Simplified for now
-	source_files?: Array<any>; // Simplified for now
-	archived?: boolean;
-	callback_uri?: string;
-	created_at?: string;
-	modified_at?: string;
-	// Add other fields from user's example if needed
-}
-
-// Interface for the full GET /project/{id} response
-interface ProjectGetResponse {
-	data: ProjectDetailsData;
-	token_cost?: number; // Mark as optional, as it might not be present if status is IN_PROGRESS
-}
-
-interface ProjectCreateApiResponse {
-	project_id: string;
-	message: string;
 }
 
 // Project operations
@@ -558,7 +533,7 @@ export class StrakerVerify implements INodeType {
 						headers: {
 							Authorization: `Bearer ${apiKey}`,
 						},
-					})) as { workflows: Array<{ id: string; name: string }> }; // Added type assertion
+					})) as { workflows: Array<Workflow> }; // Added type assertion
 					this.logger.debug('Raw workflows API response:', { data: response });
 
 					const workflowsArray = response.workflows; // Access the nested array
@@ -598,7 +573,7 @@ export class StrakerVerify implements INodeType {
 						headers: {
 							Authorization: `Bearer ${apiKey}`,
 						},
-					})) as { data: Array<{ id: string; name: string; code?: string }> }; // Added type assertion
+					})) as { data: Array<Language> }; // Added type assertion
 					this.logger.debug('Raw languages API response:', { data: response });
 
 					const languagesArray = response.data; // Access the nested array

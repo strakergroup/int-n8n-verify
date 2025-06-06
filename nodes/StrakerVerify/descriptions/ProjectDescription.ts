@@ -93,7 +93,7 @@ export const projectFields: INodeProperties[] = [
 		description: 'The ID of the language for the segments',
 	},
 	{
-		displayName: 'Title',
+		displayName: 'Project Title',
 		name: 'title',
 		type: 'string',
 		default: '',
@@ -111,6 +111,7 @@ export const projectFields: INodeProperties[] = [
 		name: 'languages',
 		type: 'multiOptions',
 		required: true,
+		noDataExpression: true,
 		displayOptions: {
 			show: {
 				resource: ['project'],
@@ -121,13 +122,13 @@ export const projectFields: INodeProperties[] = [
 			loadOptionsMethod: 'getLanguages',
 		},
 		default: [],
-		description: 'Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>. Language Names or IDs. Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+		description: 'Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
 	},
 	{
 		displayName: 'Workflow Name or ID',
 		name: 'workflowId',
 		type: 'options',
-		required: true,
+		noDataExpression: true,
 		displayOptions: {
 			show: {
 				resource: ['project'],
@@ -138,7 +139,8 @@ export const projectFields: INodeProperties[] = [
 			loadOptionsMethod: 'getWorkflows',
 		},
 		default: '',
-		description: 'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>. Workflow Name or ID. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+		required: true,
+		description: 'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
 	},
 	{
 		displayName: 'Binary Property',
