@@ -28,8 +28,8 @@
           "__rl": true,
           "value": "1jS3LMLVuHbsKFmtTRiRmUPUBO-CKqsfb",
           "mode": "list",
-          "cachedResultName": "n8n_input",
-          "cachedResultUrl": "https://drive.google.com/drive/folders/1jS3LMLVuHbsKFmtTRiRmUPUBO-CKqsfb"
+          "cachedResultName": "",
+          "cachedResultUrl": ""
         },
         "event": "fileCreated",
         "options": {}
@@ -42,13 +42,7 @@
       ],
       "id": "f8a3825e-2091-4359-ad1a-9ac9ed4423a0",
       "name": "Watch Input Folder",
-      "notesInFlow": true,
-      "credentials": {
-        "googleDriveOAuth2Api": {
-          "id": "on4yFmHCAe4A3uke",
-          "name": "Google Drive account"
-        }
-      }
+      "notesInFlow": true
     },
     {
       "parameters": {
@@ -104,8 +98,8 @@
           "__rl": true,
           "value": "16Ke3E8wSbTVfuOUXrex-ueNLuyIRhK95",
           "mode": "list",
-          "cachedResultName": "n8n_output",
-          "cachedResultUrl": "https://drive.google.com/drive/folders/16Ke3E8wSbTVfuOUXrex-ueNLuyIRhK95"
+          "cachedResultName": "",
+          "cachedResultUrl": ""
         },
         "options": {}
       },
@@ -146,13 +140,7 @@
       "id": "5152a976-9ea9-48f6-bbe1-3bbbff90f13b",
       "name": "Notify",
       "webhookId": "516ba7f2-c441-4cf9-a045-ef8842b273fb",
-      "notesInFlow": true,
-      "credentials": {
-        "slackApi": {
-          "id": "5hRsfqiopQlBygkp",
-          "name": "Slack account"
-        }
-      }
+      "notesInFlow": true
     },
     {
       "parameters": {
@@ -229,11 +217,8 @@
       "parameters": {
         "operation": "create",
         "title": "TEST 12",
-        "languages": [
-          "917FF728-0725-A033-1278-33025F49CA40"
-        ],
-        "workflowId": "e2c7f717-6845-434e-b590-5a5f194f7fba",
-        "callbackUrl": "https://known-rarely-skunk.ngrok-free.app/webhook/6540f764-161d-4627-b7c2-a78a992daf1d"
+        "languages": [],
+        "workflowId": "78ed818e-3655-4bd2-b347-dcce14e58c1c"
       },
       "type": "n8n-nodes-straker-verify.strakerVerify",
       "typeVersion": 1,
@@ -243,13 +228,7 @@
       ],
       "id": "b0cd4ece-949b-43d1-8229-2c6988dac15e",
       "name": "Start Translation",
-      "notesInFlow": true,
-      "credentials": {
-        "strakerVerifyApi": {
-          "id": "iRfa1PqR7RY6GKtJ",
-          "name": "Straker Verify account"
-        }
-      }
+      "notesInFlow": true
     }
   ],
   "pinData": {},
@@ -347,7 +326,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "667a8708-d88e-4f66-952c-a8451dea6121",
+  "versionId": "173445a9-d8f0-4f31-a46d-8671eabf98a8",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "80505302fd25f9874da713d840f99df997e6fbacf51f09d5b5fa57decd258ea9"
