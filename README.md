@@ -37,8 +37,8 @@ Follow the [installation guide](https://docs.n8n.io/integrations/community-nodes
 ### Key Resource
 
 * **Create**: Create a new API key
-* **Get**: Get a specific API key
-* **Get Many**: Get all API keys
+* **Delete**: Delete an API key
+* **Get**: Get all API keys
 
 ### Project Resource
 
@@ -50,7 +50,7 @@ Follow the [installation guide](https://docs.n8n.io/integrations/community-nodes
 
 ### User Resource
 
-* **Get Balance**: Get the user token balance
+* **Get Current User**: Get the currently authenticated user information
 
 ### Workflow Resource
 
@@ -71,10 +71,28 @@ To use this node, you'll need to create an API key from the Straker Verify platf
 * [n8n community nodes documentation](https://docs.n8n.io/integrations/community-nodes/)
 * [Straker Verify API Documentation](https://api-verify.straker.ai/docs#/)
 
+## Example Workflow
+
+For an example of how to use this node in a complete workflow, you can refer to the following template:
+
+* [Simple Workflow Template](https://raw.githubusercontent.com/strakergroup/int-n8n-verify/refs/heads/master/workflows/Simple_Workflow.json)
+
+This template demonstrates a basic flow for submitting a file for translation and retrieving the translated version.
+
 ## Binary Data Handling
 
-This node supports proper binary data handling for files:
+This node supports proper binary data handling for files.
 
-* When using the **File > Get** operation, the node returns data in binary format that can be used directly with other n8n nodes like Google Drive, AWS S3, etc.
-* When using the binary data with other nodes, refer to the binary property name `data` in the receiving node's configuration.
-* Project creation accepts binary files as input through the binary properties specified in the Files field. You can specify multiple files by using comma-separated property names (e.g., "data", "data,document", or "file1,file2,file3").
+### File Download (File > Get)
+
+The **File > Get** operation returns binary data that can be used directly with other n8n nodes that handle files, such as Google Drive or AWS S3. When using the output of this operation, you can refer to the binary property (by default, `data`) in the subsequent node's configuration.
+
+### File Upload (Project > Create)
+
+When creating a project, the node uploads files to Straker Verify. For this to work correctly:
+
+* Each file you want to upload must be a separate n8n item.
+* Each item must contain binary data under a specific property name.
+* You must specify this property name in the **Binary Property** field of the **Project > Create** operation. The default is `data`.
+
+For example, if you have two files to upload, your workflow should provide two items to the Straker Verify node. If the first item has its file in `binary.myFile` and the second in `binary.anotherFile`, you would need to process these items so that both files are under the same binary property name (e.g., `data`) before they reach the Straker Verify node. The **Set** node can be useful for this transformation.
