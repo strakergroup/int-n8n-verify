@@ -1,0 +1,357 @@
+{
+  "name": "Simple Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "/**\n * n8n “Function” node — Run Once for All Items\n * ──> emits one item per target-file URL, with\n *      • filename tagged <base>_<site_shortname>.<ext>\n *      • original language_uuid preserved\n */\nreturn items.flatMap(({ json: { data } }) => {\n  if (!data?.source_files) {\n    throw new Error('No source_files array found in job payload');\n  }\n\n  // uuid → site_shortname\n  const shortCode = Object.fromEntries(\n    (data.target_languages ?? []).map(l => [\n      l.uuid.toLowerCase(),\n      l.site_shortname ?? l.code,\n    ]),\n  );\n\n  return data.source_files.flatMap(sf =>\n    (sf.target_files ?? []).map(tf => {\n      const short = shortCode[tf.language_uuid.toLowerCase()] || tf.language_uuid;\n      const [name, ext = ''] = sf.filename.split(/(?=\\.[^\\.]+$)/); // split at last dot\n\n      return {\n        json: {\n          url: tf.url,\n          filename: `${name}_${short}${ext}`,\n          source_file_uuid: sf.file_uuid,\n          target_file_uuid: tf.target_file_uuid,\n          language_uuid: tf.language_uuid,\n          status: tf.status,\n        },\n      };\n    }),\n  );\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        740
+      ],
+      "id": "3686255e-4eee-41aa-9046-76ef2d0159f5",
+      "name": "Flatten"
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "value": "1jS3LMLVuHbsKFmtTRiRmUPUBO-CKqsfb",
+          "mode": "list",
+          "cachedResultName": "n8n_input",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/1jS3LMLVuHbsKFmtTRiRmUPUBO-CKqsfb"
+        },
+        "event": "fileCreated",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        480
+      ],
+      "id": "f8a3825e-2091-4359-ad1a-9ac9ed4423a0",
+      "name": "Watch Input Folder",
+      "notesInFlow": true,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "on4yFmHCAe4A3uke",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -20,
+        480
+      ],
+      "id": "53ab19cd-4abc-463c-9c98-00e4fe843ef1",
+      "name": "Download Files",
+      "notesInFlow": true,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "on4yFmHCAe4A3uke",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "6540f764-161d-4627-b7c2-a78a992daf1d",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        740
+      ],
+      "id": "a29304d4-4d30-4d36-9db1-0c0412c946a9",
+      "name": "Wait for Completion",
+      "webhookId": "6540f764-161d-4627-b7c2-a78a992daf1d"
+    },
+    {
+      "parameters": {
+        "name": "={{ $('Flatten').item.json.filename }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "16Ke3E8wSbTVfuOUXrex-ueNLuyIRhK95",
+          "mode": "list",
+          "cachedResultName": "n8n_output",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/16Ke3E8wSbTVfuOUXrex-ueNLuyIRhK95"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        640,
+        740
+      ],
+      "id": "0e4c0d6c-db2d-4625-9f57-235342ce791e",
+      "name": "Save to Output Folder",
+      "notesInFlow": true,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "on4yFmHCAe4A3uke",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C08NJCEJS8Y",
+          "mode": "list",
+          "cachedResultName": "slack-bots"
+        },
+        "text": "={{ $('Fetch Job Info').first().json.data.title }} {{ $('Fetch Job Info').first().json.data.status }}",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1080,
+        740
+      ],
+      "id": "5152a976-9ea9-48f6-bbe1-3bbbff90f13b",
+      "name": "Notify",
+      "webhookId": "516ba7f2-c441-4cf9-a045-ef8842b273fb",
+      "notesInFlow": true,
+      "credentials": {
+        "slackApi": {
+          "id": "5hRsfqiopQlBygkp",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        860,
+        740
+      ],
+      "id": "e9cac943-64d4-4a3e-99cb-e4f1ac8cbfaf",
+      "name": "Aggregate"
+    },
+    {
+      "parameters": {
+        "content": "# Straker Verify n8n Node\n\nThis node allows you to interact with the Straker Verify API to manage translation projects, API keys, user information, and files directly within your n8n workflows.\n\n## Configuration\n\n**Credentials**: Connect your Straker Verify account by creating a new credential in n8n using your Straker Verify API Key. You can find more information on obtaining an API key in the [Straker Verify API documentation](https://api-verify.straker.ai/docs).\n\n## How It's Used\n\n### Workflow 1: Submit for Translation\n\n1.  **Trigger (e.g., `Watch Input Folder` on Google Drive)**: Detects new files.\n2.  **Download File (e.g., `Download Files` from Google Drive)**: Fetches the file content.\n3.  **`Start Translation` (Straker Verify Node - Project: Create)**: Sends the file to Straker Verify to begin the translation process. This step involves specifying target languages, a Straker workflow, and a project title.\n\n### Workflow 2: Retrieve Translation\n\n1.  **Trigger (e.g., `Wait for Completion` via Webhook)**: Listens for a notification from Straker Verify (if a callback URL was configured) that the translation is ready.\n2.  **`Fetch Job Info` (Straker Verify Node - Project: Get)**: Retrieves details about the completed translation job using its ID.\n3.  **`Grab Translation` (Straker Verify Node - File: Get)**: Downloads the translated file(s) from Straker Verify.\n4.  **Save & Notify (e.g., `Save to Output Folder` on Google Drive & `Notify` via Slack)**: Stores the translated file and informs users.\n\nThis node helps automate your translation tasks by connecting Straker Verify with other services in n8n.",
+        "height": 840,
+        "width": 720
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1100,
+        260
+      ],
+      "typeVersion": 1,
+      "id": "21827824-54e7-458a-bab7-8fb3f83421ab",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "projectId": "={{ $json.body.job_uuid }}"
+      },
+      "type": "n8n-nodes-straker-verify.strakerVerify",
+      "typeVersion": 1,
+      "position": [
+        -20,
+        740
+      ],
+      "id": "5f4e70ca-2db9-4f52-94b3-f65c2c67bbe5",
+      "name": "Fetch Job Info",
+      "notesInFlow": true,
+      "credentials": {
+        "strakerVerifyApi": {
+          "id": "iRfa1PqR7RY6GKtJ",
+          "name": "Straker Verify account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "fileId": "={{ $json.target_file_uuid }}"
+      },
+      "type": "n8n-nodes-straker-verify.strakerVerify",
+      "typeVersion": 1,
+      "position": [
+        420,
+        740
+      ],
+      "id": "180231a6-563a-4843-a450-98f67cda6215",
+      "name": "Grab Translation",
+      "notesInFlow": true,
+      "credentials": {
+        "strakerVerifyApi": {
+          "id": "iRfa1PqR7RY6GKtJ",
+          "name": "Straker Verify account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "title": "TEST 12",
+        "languages": [
+          "917FF728-0725-A033-1278-33025F49CA40"
+        ],
+        "workflowId": "e2c7f717-6845-434e-b590-5a5f194f7fba",
+        "callbackUrl": "https://known-rarely-skunk.ngrok-free.app/webhook/6540f764-161d-4627-b7c2-a78a992daf1d"
+      },
+      "type": "n8n-nodes-straker-verify.strakerVerify",
+      "typeVersion": 1,
+      "position": [
+        200,
+        480
+      ],
+      "id": "b0cd4ece-949b-43d1-8229-2c6988dac15e",
+      "name": "Start Translation",
+      "notesInFlow": true,
+      "credentials": {
+        "strakerVerifyApi": {
+          "id": "iRfa1PqR7RY6GKtJ",
+          "name": "Straker Verify account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Flatten": {
+      "main": [
+        [
+          {
+            "node": "Grab Translation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Watch Input Folder": {
+      "main": [
+        [
+          {
+            "node": "Download Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Files": {
+      "main": [
+        [
+          {
+            "node": "Start Translation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Completion": {
+      "main": [
+        [
+          {
+            "node": "Fetch Job Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Output Folder": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Notify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Job Info": {
+      "main": [
+        [
+          {
+            "node": "Flatten",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Grab Translation": {
+      "main": [
+        [
+          {
+            "node": "Save to Output Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "667a8708-d88e-4f66-952c-a8451dea6121",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "80505302fd25f9874da713d840f99df997e6fbacf51f09d5b5fa57decd258ea9"
+  },
+  "id": "UlhQJ6EtKLNQ0D0B",
+  "tags": []
+}
