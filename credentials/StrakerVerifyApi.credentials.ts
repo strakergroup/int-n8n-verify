@@ -11,6 +11,13 @@ export class StrakerVerifyApi implements ICredentialType {
 	documentationUrl = 'https://api-verify.straker.ai/docs';
 	properties: INodeProperties[] = [
 		{
+			displayName: 'Base URL',
+			name: 'environment',
+			type: 'string',
+			default: 'https://api-verify.straker.ai',
+			description: 'Enter the base URL of the Straker Verify API.',
+		},
+		{
 			displayName: 'API Key',
 			name: 'apiKey',
 			type: 'string',
@@ -35,7 +42,7 @@ export class StrakerVerifyApi implements ICredentialType {
 	// The block below tells how this credential can be tested
 	test: ICredentialTestRequest = {
 		request: {
-			baseURL: 'https://api-verify.straker.ai',
+			baseURL: '={{$credentials.environment}}',
 			url: '/languages',
 			method: 'GET',
 		},

@@ -4,7 +4,7 @@ import {
 	INodeType,
 	INodeTypeDescription,
 	NodeOperationError,
-	IDataObject,
+	ICredentialDataDecryptedObject,
 	NodeConnectionType,
 	NodeApiError,
 	ILoadOptionsFunctions,
@@ -23,7 +23,6 @@ import {
 } from './descriptions';
 import { Language, ProjectCreateApiResponse, ProjectGetResponse, Workflow } from './types';
 
-const BASE_URL = process.env.STRAKER_API_URL || 'https://api-verify.straker.ai';
 
 // Helper function for delay
 async function delay(ms: number): Promise<void> {
@@ -34,12 +33,12 @@ async function delay(ms: number): Promise<void> {
 async function projectGetAll(
 	this: IExecuteFunctions,
 	i: number,
-	baseUrl: string,
-	credentials: IDataObject,
+
+	credentials: ICredentialDataDecryptedObject,
 ): Promise<any> {
 	return await this.helpers.httpRequest({
 		method: 'GET',
-		url: `${baseUrl}/project`,
+		url: `${credentials.environment}/project`,
 		headers: {
 			Authorization: `Bearer ${credentials.apiKey}`,
 		},
@@ -49,14 +48,14 @@ async function projectGetAll(
 async function projectGet(
 	this: IExecuteFunctions,
 	i: number,
-	baseUrl: string,
-	credentials: IDataObject,
+
+	credentials: ICredentialDataDecryptedObject,
 ): Promise<any> {
 	const projectId = this.getNodeParameter('projectId', i) as string;
 
 	return await this.helpers.httpRequest({
 		method: 'GET',
-		url: `${baseUrl}/project/${projectId}`,
+		url: `${credentials.environment}/project/${projectId}`,
 		headers: {
 			Authorization: `Bearer ${credentials.apiKey}`,
 		},
@@ -65,9 +64,8 @@ async function projectGet(
 
 async function waitForPendingPayment(
 	this: IExecuteFunctions,
-	baseUrl: string,
 	projectId: string,
-	credentials: IDataObject,
+	credentials: ICredentialDataDecryptedObject,
 	maxRetries = 6,
 	pauseMs = 5_000,
 ) {
@@ -75,7 +73,7 @@ async function waitForPendingPayment(
 	for (let n = 0; n < maxRetries; n++) {
 		const res = await this.helpers.httpRequest({
 			method: 'GET',
-			url: `${baseUrl}/project/${projectId}`,
+			url: `${credentials.environment}/project/${projectId}`,
 			headers: { Authorization: `Bearer ${credentials.apiKey}` },
 		}) as ProjectGetResponse;
 		// If status is PENDING_TOKEN_PAYMENT or already COMPLETED, return the response
@@ -97,8 +95,8 @@ async function waitForPendingPayment(
 export async function projectCreate(
 	this: IExecuteFunctions,
 	i: number,
-	baseUrl: string,
-	credentials: IDataObject,
+
+	credentials: ICredentialDataDecryptedObject,
 ): Promise<INodeExecutionData[]> {
 	const binaryProp   = this.getNodeParameter('binaryProperty', i, 'data') as string;
 	const languagesArr = this.getNodeParameter('languages',      i)         as string[];
@@ -142,7 +140,10 @@ export async function projectCreate(
 	// 5. Append callback_uri
 	form.append('callback_uri', callbackUrl);
 
-	const url = `${baseUrl}/project?app_source=n8n`;
+	// 6. Append confirmation_required
+	form.append('confirmation_required', 'true');
+
+	const url = `${credentials.environment}/project?app_source=n8n`;
 
 	/* 3 · POST /project */
 	const creation = await this.helpers.httpRequest({
@@ -165,7 +166,6 @@ export async function projectCreate(
 	/* 4 · Wait for PENDING_TOKEN_PAYMENT or COMPLETED */
 	const pending = await waitForPendingPayment.call(
 		this,
-		baseUrl,
 		projectId,
 		credentials,
 	);
@@ -193,7 +193,7 @@ export async function projectCreate(
 	}
 
 	/* 5 · Balance check */
-	const me      = await userGetMe.call(this, 0, baseUrl, credentials);
+	const me      = await userGetMe.call(this, 0, credentials);
 	const balance = me.balance as number | undefined;
 
 	if (balance === undefined)
@@ -224,7 +224,6 @@ export async function projectCreate(
 		const confirmation_status = await projectConfirm.call(
 			this,
 			0,
-			baseUrl,
 			credentials,
 			projectId,
 		);
@@ -250,24 +249,22 @@ export async function projectCreate(
 
 async function projectConfirm(
 	this: IExecuteFunctions,
-	_i: number, // Item index i is not strictly needed here if projectIdToConfirm is passed
-	baseUrl: string,
-	credentials: IDataObject,
-	projectIdToConfirm: string, // Added projectId as a direct argument
+	_i: number,
+	credentials: ICredentialDataDecryptedObject,
+	projectIdToConfirm: string,
 ): Promise<string> {
-	// const projectId = this.getNodeParameter('projectId', i) as string; // Old way: get from node params
 
 	const body = new URLSearchParams();
 	body.append('project_id', projectIdToConfirm);
 
 	const response = await this.helpers.httpRequest({
 		method: 'POST',
-		url: `${baseUrl}/project/confirm`,
+		url: `${credentials.environment}/project/confirm`,
 		headers: {
 			Authorization: `Bearer ${credentials.apiKey}`,
-			'Content-Type': 'application/x-www-form-urlencoded', // Align with user's cURL
+			'Content-Type': 'application/x-www-form-urlencoded',
 		},
-		body: body.toString(), // Send as URL-encoded string
+		body: body.toString(),
 	});
 
 	return response.body;
@@ -276,8 +273,7 @@ async function projectConfirm(
 async function projectGetSegments(
 	this: IExecuteFunctions,
 	i: number,
-	baseUrl: string,
-	credentials: IDataObject,
+	credentials: ICredentialDataDecryptedObject,
 ): Promise<any> {
 	const projectId = this.getNodeParameter('projectId', i) as string;
 	const fileId = this.getNodeParameter('fileId', i) as string;
@@ -285,7 +281,7 @@ async function projectGetSegments(
 
 	return await this.helpers.httpRequest({
 		method: 'GET',
-		url: `${baseUrl}/project/${projectId}/segments/${fileId}/${languageId}`,
+		url: `${credentials.environment}/project/${projectId}/segments/${fileId}/${languageId}`,
 		headers: {
 			Authorization: `Bearer ${credentials.apiKey}`,
 		},
@@ -296,12 +292,11 @@ async function projectGetSegments(
 async function keyGet(
 	this: IExecuteFunctions,
 	i: number,
-	baseUrl: string,
-	credentials: IDataObject,
+	credentials: ICredentialDataDecryptedObject,
 ): Promise<any> {
 	return await this.helpers.httpRequest({
 		method: 'GET',
-		url: `${baseUrl}/key`,
+		url: `${credentials.environment}/key`,
 		headers: {
 			Authorization: `Bearer ${credentials.apiKey}`,
 		},
@@ -311,15 +306,14 @@ async function keyGet(
 async function keyCreate(
 	this: IExecuteFunctions,
 	i: number,
-	baseUrl: string,
-	credentials: IDataObject,
+	credentials: ICredentialDataDecryptedObject,
 ): Promise<any> {
 	const name = this.getNodeParameter('name', i) as string;
 	const role = this.getNodeParameter('role', i) as string;
 
 	return await this.helpers.httpRequest({
 		method: 'POST',
-		url: `${baseUrl}/key`,
+		url: `${credentials.environment}/key`,
 		headers: {
 			Authorization: `Bearer ${credentials.apiKey}`,
 			'Content-Type': 'application/json',
@@ -334,14 +328,13 @@ async function keyCreate(
 async function keyDelete(
 	this: IExecuteFunctions,
 	i: number,
-	baseUrl: string,
-	credentials: IDataObject,
+	credentials: ICredentialDataDecryptedObject,
 ): Promise<any> {
 	const keyId = this.getNodeParameter('keyId', i) as string;
 
 	return await this.helpers.httpRequest({
 		method: 'DELETE',
-		url: `${baseUrl}/key/${keyId}`,
+		url: `${credentials.environment}/key/${keyId}`,
 		headers: {
 			Authorization: `Bearer ${credentials.apiKey}`,
 		},
@@ -352,12 +345,11 @@ async function keyDelete(
 async function userGetMe(
 	this: IExecuteFunctions,
 	i: number,
-	baseUrl: string,
-	credentials: IDataObject,
+	credentials: ICredentialDataDecryptedObject,
 ): Promise<any> {
 	return await this.helpers.httpRequest({
 		method: 'GET',
-		url: `${baseUrl}/user/balance`,
+		url: `${credentials.environment}/user/balance`,
 		headers: {
 			Authorization: `Bearer ${credentials.apiKey}`,
 			'Accept': 'application/json',
@@ -369,9 +361,8 @@ async function userGetMe(
 async function fileGet(
 	this: IExecuteFunctions,
 	i: number,
-	baseUrl: string,
 	_items: INodeExecutionData[],
-	credentials: IDataObject,
+	credentials: ICredentialDataDecryptedObject,
 ): Promise<INodeExecutionData> {
 	const fileId = this.getNodeParameter('fileId', i) as string;
 
@@ -379,9 +370,9 @@ async function fileGet(
 		// Make a simple request to get the file
 		const response = await this.helpers.request({
 			method: 'GET',
-			uri: `${baseUrl}/file/${fileId}`,
+			uri: `${credentials.environment}/file/${fileId}`,
 			headers: {
-				Accept: '*/*',
+				Accept: 'application/json',
 				Authorization: `Bearer ${credentials.apiKey}`,
 			},
 			encoding: null,
@@ -529,7 +520,7 @@ export class StrakerVerify implements INodeType {
 				try {
 					const response = (await this.helpers.httpRequest({
 						method: 'GET',
-						url: `${BASE_URL}/workflow`,
+						url: `${credentials.environment}/workflow`,
 						headers: {
 							Authorization: `Bearer ${apiKey}`,
 						},
@@ -569,19 +560,19 @@ export class StrakerVerify implements INodeType {
 				try {
 					const response = (await this.helpers.httpRequest({
 						method: 'GET',
-						url: `${BASE_URL}/languages`,
+						url: `${credentials.environment}/languages`,
 						headers: {
 							Authorization: `Bearer ${apiKey}`,
 						},
 					})) as { data: Array<Language> }; // Added type assertion
 					this.logger.debug('Raw languages API response:', { data: response });
 
-					const languagesArray = response.data; // Access the nested array
+					const languagesArray = response.data;
 
 					if (Array.isArray(languagesArray)) {
 						const mappedLanguages = languagesArray
 							.map((language) => ({
-								name: language.name, // Assuming 'name' is the correct property for display
+								name: language.name,
 								value: language.id,
 							}))
 							.sort((a, b) => a.name.localeCompare(b.name));
@@ -608,6 +599,7 @@ export class StrakerVerify implements INodeType {
 		const resource = this.getNodeParameter('resource', 0) as string;
 		const operation = this.getNodeParameter('operation', 0) as string;
 		const credentials = await this.getCredentials('strakerVerifyApi');
+		// Determine base URL from credentials (environment selection) or fallback to default
 
 		this.logger.debug('===== DEBUG: Node Execution Start =====');
 		this.logger.debug(
@@ -619,7 +611,7 @@ export class StrakerVerify implements INodeType {
 			try {
 				// Call projectCreate once. It uses itemIndex 0 for shared NodeParameters
 				// and this.getInputData() internally to gather all files.
-				const projectCreateResult = await projectCreate.call(this, 0, BASE_URL, credentials);
+				const projectCreateResult = await projectCreate.call(this, 0, credentials);
 				// projectCreateResult is INodeExecutionData[] (usually one item: {json: apiResponse})
 				returnData = projectCreateResult;
 				this.logger.debug('projectCreate successful', { responseDataCount: returnData.length });
@@ -649,10 +641,10 @@ export class StrakerVerify implements INodeType {
 							switch (operation) {
 								// 'create' is handled above
 								case 'getAll':
-									responseData = await projectGetAll.call(this, i, BASE_URL, credentials);
+									responseData = await projectGetAll.call(this, i, credentials);
 									break;
 								case 'get':
-									responseData = await projectGet.call(this, i, BASE_URL, credentials);
+									responseData = await projectGet.call(this, i, credentials);
 									break;
 								case 'confirm':
 									// For the general 'confirm' operation (not the one inside projectCreate)
@@ -661,13 +653,12 @@ export class StrakerVerify implements INodeType {
 									responseData = await projectConfirm.call(
 										this,
 										i,
-										BASE_URL,
 										credentials,
 										projectIdToConfirm,
 									);
 									break;
 								case 'getSegments':
-									responseData = await projectGetSegments.call(this, i, BASE_URL, credentials);
+									responseData = await projectGetSegments.call(this, i, credentials);
 									break;
 								default:
 									throw new NodeOperationError(
@@ -680,13 +671,13 @@ export class StrakerVerify implements INodeType {
 						case 'key':
 							switch (operation) {
 								case 'get':
-									responseData = await keyGet.call(this, i, BASE_URL, credentials);
+									responseData = await keyGet.call(this, i, credentials);
 									break;
 								case 'create':
-									responseData = await keyCreate.call(this, i, BASE_URL, credentials);
+									responseData = await keyCreate.call(this, i, credentials);
 									break;
 								case 'delete':
-									responseData = await keyDelete.call(this, i, BASE_URL, credentials);
+									responseData = await keyDelete.call(this, i, credentials);
 									break;
 								default:
 									throw new NodeOperationError(
@@ -699,7 +690,7 @@ export class StrakerVerify implements INodeType {
 						case 'user':
 							switch (operation) {
 								case 'me':
-									responseData = await userGetMe.call(this, i, BASE_URL, credentials);
+									responseData = await userGetMe.call(this, i, credentials);
 									break;
 								default:
 									throw new NodeOperationError(
@@ -717,7 +708,6 @@ export class StrakerVerify implements INodeType {
 									singleItemExecutionData = await fileGet.call(
 										this,
 										i,
-										BASE_URL,
 										items,
 										credentials,
 									);
