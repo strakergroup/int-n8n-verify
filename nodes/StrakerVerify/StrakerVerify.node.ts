@@ -76,6 +76,14 @@ async function waitForPendingPayment(
 			url: `${credentials.environment}/project/${projectId}`,
 			headers: { Authorization: `Bearer ${credentials.apiKey}` },
 		}) as ProjectGetResponse;
+		// fail early if project is status FAILED
+		if (res.data.status === 'FAILED') {
+			throw new NodeOperationError(
+				this.getNode(),
+				`Project status is FAILED. Project ID: ${projectId}`,
+			);
+		}
+
 		// If status is PENDING_TOKEN_PAYMENT or already COMPLETED, return the response
 		if (res.data.status === 'PENDING_TOKEN_PAYMENT') {
 			this.logger.debug(`waitForPendingPayment: Exiting loop. Status is ${res.data.status}.`, { projectDetails: res.data });
