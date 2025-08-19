@@ -67,7 +67,7 @@ async function waitForPendingPayment(
 	projectId: string,
 	credentials: ICredentialDataDecryptedObject,
 	maxRetries = 6,
-	pauseMs = 5_000,
+	pauseMs = 10_000,
 ) {
 	let lastResponse: ProjectGetResponse | null = null;
 	for (let n = 0; n < maxRetries; n++) {
