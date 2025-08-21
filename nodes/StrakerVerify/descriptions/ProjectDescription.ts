@@ -59,7 +59,7 @@ export const projectFields: INodeProperties[] = [
 		displayOptions: {
 			show: {
 				resource: ['project'],
-				operation: ['get', 'confirm', 'getSegments', 'checkStatus'],
+				operation: ['get', 'confirm', 'getSegments'],
 			},
 		},
 		description: 'The ID of the project',
