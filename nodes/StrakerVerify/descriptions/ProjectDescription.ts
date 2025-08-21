@@ -17,13 +17,13 @@ export const projectOperations: INodeProperties[] = [
 				name: 'Confirm',
 				value: 'confirm',
 				action: 'Confirm a project',
-				description: 'Confirm a project',
+				description: 'Confirm a project that is pending payment',
 			},
 			{
 				name: 'Create',
 				value: 'create',
 				action: 'Create a project with file upload',
-				description: 'Create a new project with file upload',
+				description: 'Create a new project with file upload. This action only sends the initial create request; use "Confirm" to approve payment afterwards.',
 			},
 			{
 				name: 'Get',
@@ -59,7 +59,7 @@ export const projectFields: INodeProperties[] = [
 		displayOptions: {
 			show: {
 				resource: ['project'],
-				operation: ['get', 'confirm', 'getSegments'],
+				operation: ['get', 'confirm', 'getSegments', 'checkStatus'],
 			},
 		},
 		description: 'The ID of the project',
@@ -169,5 +169,37 @@ export const projectFields: INodeProperties[] = [
 			},
 		},
 		description: 'The URL to send the callback to once the project is completed',
-	}
+	},
+	{
+		displayName: 'Max Retries',
+		name: 'maxRetries',
+		type: 'number',
+		default: 6,
+		typeOptions: {
+			minValue: 1,
+		},
+		displayOptions: {
+			show: {
+				resource: ['project'],
+				operation: ['confirm'],
+			},
+		},
+		description: 'Number of times to poll project status before giving up',
+	},
+	{
+		displayName: 'Wait Between Retries (Seconds)',
+		name: 'waitSeconds',
+		type: 'number',
+		default: 10,
+		typeOptions: {
+			minValue: 1,
+		},
+		displayOptions: {
+			show: {
+				resource: ['project'],
+				operation: ['confirm'],
+			},
+		},
+		description: 'Seconds to wait between status checks',
+	},
 ];

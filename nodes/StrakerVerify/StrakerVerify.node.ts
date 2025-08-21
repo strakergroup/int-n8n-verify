@@ -24,10 +24,7 @@ import {
 import { Language, ProjectCreateApiResponse, ProjectGetResponse, Workflow } from './types';
 
 
-// Helper function for delay
-async function delay(ms: number): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms));
-}
+// (removed helper delay and waitForPendingPayment, no longer needed after simplifying projectCreate)
 
 // Project operations
 async function projectGetAll(
@@ -62,41 +59,52 @@ async function projectGet(
 	});
 }
 
-async function waitForPendingPayment(
+// Helper sleep
+async function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function projectConfirmWithRetry(
 	this: IExecuteFunctions,
-	projectId: string,
+	i: number,
 	credentials: ICredentialDataDecryptedObject,
-	maxRetries = 6,
-	pauseMs = 10_000,
-) {
-	let lastResponse: ProjectGetResponse | null = null;
-	for (let n = 0; n < maxRetries; n++) {
-		const res = await this.helpers.httpRequest({
-			method: 'GET',
-			url: `${credentials.environment}/project/${projectId}`,
-			headers: { Authorization: `Bearer ${credentials.apiKey}` },
-		}) as ProjectGetResponse;
-		// fail early if project is status FAILED
-		if (res.data.status === 'FAILED') {
-			throw new NodeOperationError(
-				this.getNode(),
-				`Project status is FAILED. Project ID: ${projectId}`,
-			);
+): Promise<any> {
+	const projectId = this.getNodeParameter('projectId', i) as string;
+	const maxRetries = this.getNodeParameter('maxRetries', i, 10) as number;
+	const waitSeconds = this.getNodeParameter('waitSeconds', i, 10) as number;
+
+	for (let attempt = 0; attempt < maxRetries; attempt++) {
+		const statusInfo = await projectGet.call(this, i, credentials) as ProjectGetResponse;
+		const status = statusInfo.data.status as string;
+
+		if (status === 'FAILED')
+			throw new NodeOperationError(this.getNode(), 'Project status is FAILED.');
+
+		if (status === 'COMPLETED')
+			throw new NodeOperationError(this.getNode(), 'Project already COMPLETED, no confirmation needed.');
+
+		if (status === 'PENDING_TOKEN_PAYMENT') {
+			// Ensure user has enough balance
+			const me = await userGetMe.call(this, i, credentials);
+			const balance = me.balance as number | undefined;
+			if (balance === undefined)
+				throw new NodeOperationError(this.getNode(), 'Unable to retrieve user balance.');
+			if (balance < (statusInfo.token_cost ?? 0))
+				throw new NodeOperationError(
+					this.getNode(),
+					`Insufficient token balance. Required: ${statusInfo.token_cost}, Available: ${balance}`,
+				);
+
+			// Attempt confirmation once balance ok
+			return await projectConfirm.call(this, i, credentials, projectId);
 		}
 
-		// If status is PENDING_TOKEN_PAYMENT or already COMPLETED, return the response
-		if (res.data.status === 'PENDING_TOKEN_PAYMENT') {
-			this.logger.debug(`waitForPendingPayment: Exiting loop. Status is ${res.data.status}.`, { projectDetails: res.data });
-			return res;
-		}
-		lastResponse = res; // Store the last response
-		await delay(pauseMs);
+		// Wait and retry if status not ready yet
+		if (attempt < maxRetries - 1) await sleep(waitSeconds * 1000);
 	}
-	// If loop finishes, status was not reached
-	this.logger.error('waitForPendingPayment timeout. Last project details:', { projectDetails: lastResponse });
 	throw new NodeOperationError(
 		this.getNode(),
-		`Status never reached PENDING_TOKEN_PAYMENT or COMPLETED after ${maxRetries} checks. Last status: ${lastResponse?.data?.status}`,
+		`Status never reached PENDING_TOKEN_PAYMENT after ${maxRetries} retries.`,
 	);
 }
 
@@ -163,95 +171,20 @@ export async function projectCreate(
 		},
 		body: form,
 	}) as ProjectCreateApiResponse;
-	const projectId = creation.project_id as string | undefined;
 
 	// Log the initial creation response
 	this.logger.debug('Initial project creation API response:', { creationResponse: creation });
 
-	if (!projectId)
-		throw new NodeOperationError(this.getNode(), 'Missing project_id in response.');
-
-	/* 4 · Wait for PENDING_TOKEN_PAYMENT or COMPLETED */
-	const pending = await waitForPendingPayment.call(
-		this,
-		projectId,
-		credentials,
-	);
-
-	// If project is already COMPLETED, skip payment and confirmation
-	if (pending.data.status === 'COMPLETED') {
-		this.logger.debug('Project is already COMPLETED. Skipping balance check and confirmation.', { projectDetails: pending.data });
-		return this.helpers.returnJsonArray({
-			creation: {
-				project_id: creation.project_id,
-				message: creation.message,
-				status: 'COMPLETED',
-			},
-			project_details: pending.data, // Return full project details as received
-		});
-	}
-
-	// If PENDING_TOKEN_PAYMENT, proceed with token cost, balance check, and confirmation
-	// Ensure token_cost is present when status is PENDING_TOKEN_PAYMENT
-	const tokenCost = pending.token_cost as number | undefined;
-
-	if (tokenCost === undefined) {
-		this.logger.error('Token cost is undefined, but project status is PENDING_TOKEN_PAYMENT. This is unexpected.', { pendingResponse: pending });
-		throw new NodeOperationError(this.getNode(), 'Token cost is unexpectedly undefined for a project pending payment. Project might have moved to a different state or API response is missing data.');
-	}
-
-	/* 5 · Balance check */
-	const me      = await userGetMe.call(this, 0, credentials);
-	const balance = me.balance as number | undefined;
-
-	if (balance === undefined)
-		return this.helpers.returnJsonArray({
-			creation: {
-				project_id: creation.project_id,
-				message: creation.message,
-			},
-			pending: {
-				data: pending.data,
-				token_cost: pending.token_cost,
-			},
-			confirmation_status: 'missing_balance'
-		});
-
-	if (balance < tokenCost)
-		return this.helpers.returnJsonArray({
-			creation: {
-				project_id: creation.project_id,
-				message: creation.message,
-			},
-			balance,
-			tokenCost
-		});
-
-	/* 6 · Confirm project */
-	try {
-		const confirmation_status = await projectConfirm.call(
-			this,
-			0,
-			credentials,
-			projectId,
-		);
-		return this.helpers.returnJsonArray({
-			creation: {
-				project_id: creation.project_id,
-				message: creation.message,
-			},
-			confirmation_status,
-		});
-	} catch (error) {
-		this.logger.error('Error confirming project:', { error });
-		return this.helpers.returnJsonArray({
-			creation: {
-				project_id: creation.project_id,
-				message: creation.message,
-			},
-			error: error.message,
-		});
-	}
+	/**
+	 * Each node action should perform exactly ONE HTTP request.
+	 * The previous implementation chained multiple requests (polling for status,
+	 * balance check, project confirmation, etc.).
+	 * We now return the raw creation response and let the workflow author decide
+	 * whether to trigger follow-up actions (e.g. confirm project) in subsequent
+	 * node executions.
+	 */
+	// Using a wrapper object to satisfy IDataObject requirement
+	return this.helpers.returnJsonArray({ creation });
 }
 
 
@@ -260,22 +193,28 @@ async function projectConfirm(
 	_i: number,
 	credentials: ICredentialDataDecryptedObject,
 	projectIdToConfirm: string,
-): Promise<string> {
+): Promise<any> {
 
-	const body = new URLSearchParams();
-	body.append('project_id', projectIdToConfirm);
+	try {
+		const form = new FormData();
+		form.append('project_id', projectIdToConfirm);
 
-	const response = await this.helpers.httpRequest({
-		method: 'POST',
-		url: `${credentials.environment}/project/confirm`,
-		headers: {
-			Authorization: `Bearer ${credentials.apiKey}`,
-			'Content-Type': 'application/x-www-form-urlencoded',
-		},
-		body: body.toString(),
-	});
-
-	return response.body;
+		const response = await this.helpers.httpRequest({
+			method: 'POST',
+			url: `${credentials.environment}/project/confirm`,
+			headers: {
+				Authorization: `Bearer ${credentials.apiKey}`,
+			},
+			body: form,
+		});
+		return {
+			message: response,
+		};
+	} catch (error) {
+		throw new NodeApiError(this.getNode(), error, {
+			message: error.message,
+		});
+	}
 }
 
 async function projectGetSegments(
@@ -657,12 +596,10 @@ export class StrakerVerify implements INodeType {
 								case 'confirm':
 									// For the general 'confirm' operation (not the one inside projectCreate)
 									// it should still get projectId from parameters.
-									const projectIdToConfirm = this.getNodeParameter('projectId', i) as string;
-									responseData = await projectConfirm.call(
+									responseData = await projectConfirmWithRetry.call(
 										this,
 										i,
 										credentials,
-										projectIdToConfirm,
 									);
 									break;
 								case 'getSegments':
