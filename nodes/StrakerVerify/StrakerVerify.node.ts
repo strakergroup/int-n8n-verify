@@ -10,6 +10,7 @@ import {
 	ILoadOptionsFunctions,
 	INodePropertyOptions,
 	IBinaryData,
+	sleep
 } from 'n8n-workflow';
 import {
 	keyOperations,
@@ -22,9 +23,6 @@ import {
 	fileFields,
 } from './descriptions';
 import { Language, ProjectCreateApiResponse, ProjectGetResponse, Workflow } from './types';
-
-
-// (removed helper delay and waitForPendingPayment, no longer needed after simplifying projectCreate)
 
 // Project operations
 async function projectGetAll(
@@ -59,10 +57,6 @@ async function projectGet(
 	});
 }
 
-// Helper sleep
-async function sleep(ms: number): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 async function projectConfirmWithRetry(
 	this: IExecuteFunctions,
