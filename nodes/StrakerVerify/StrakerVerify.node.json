@@ -11,7 +11,7 @@
   "resources": {
     "credentialDocumentation": [
       {
-        "url": "https://api-verify.straker.ai/docs"
+        "url": "https://automation-gateway.straker.ai/docs"
       }
     ]
   }

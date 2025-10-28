@@ -6,12 +6,12 @@ import {
 } from 'n8n-workflow';
 
 export const STRAKER_VERIFY_BASE_URL =
-  process.env.STRAKER_VERIFY_BASE_URL || 'https://verify-api.straker.ai';
+  process.env.STRAKER_VERIFY_BASE_URL || 'https://automation-gateway.straker.ai';
 
 export class StrakerVerifyApi implements ICredentialType {
 	name = 'strakerVerifyApi';
 	displayName = 'Straker Verify API';
-	documentationUrl = 'https://api-verify.straker.ai/docs';
+	documentationUrl = 'https://automation-gateway.straker.ai/docs';
 	properties: INodeProperties[] = [
 		{
 			displayName: 'API Key',
