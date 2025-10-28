@@ -1,14 +1,16 @@
 export interface Workflow {
-	id: string;
+	uuid: string;
 	name: string;
 	description: string;
-	created_at: string;
-	active: boolean;
+	active: string;
+	version?: string;
+	created_at?: string;
 }
 
 export interface Language {
-	id: string;
+	uuid: string;
 	code: string;
+	site_shortcode: string;
 	name: string;
 }
 

@@ -5,18 +5,14 @@ import {
 	INodeProperties,
 } from 'n8n-workflow';
 
+export const STRAKER_VERIFY_BASE_URL =
+  process.env.STRAKER_VERIFY_BASE_URL || 'https://verify-api.straker.ai';
+
 export class StrakerVerifyApi implements ICredentialType {
 	name = 'strakerVerifyApi';
 	displayName = 'Straker Verify API';
 	documentationUrl = 'https://api-verify.straker.ai/docs';
 	properties: INodeProperties[] = [
-		{
-			displayName: 'Base URL',
-			name: 'environment',
-			type: 'string',
-			default: 'https://api-verify.straker.ai',
-			description: 'Enter the base URL of the Straker Verify API.',
-		},
 		{
 			displayName: 'API Key',
 			name: 'apiKey',
@@ -26,6 +22,23 @@ export class StrakerVerifyApi implements ICredentialType {
 				password: true,
 			},
 			required: true,
+		},
+		{
+			displayName: 'Environment',
+			name: 'environment',
+			type: 'options',
+			options: [
+				{
+					name: 'Production',
+					value: 'production',
+				},
+				{
+					name: 'Sandbox',
+					value: 'sandbox',
+				},
+			],
+			default: 'production',
+			description: 'Select whether to use the production or sandbox environment',
 		},
 	];
 
@@ -42,8 +55,8 @@ export class StrakerVerifyApi implements ICredentialType {
 	// The block below tells how this credential can be tested
 	test: ICredentialTestRequest = {
 		request: {
-			baseURL: '={{$credentials.environment}}',
-			url: '/languages',
+			baseURL: STRAKER_VERIFY_BASE_URL,
+			url: '/project/languages',
 			method: 'GET',
 		},
 	};
