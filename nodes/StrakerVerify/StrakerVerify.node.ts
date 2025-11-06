@@ -23,9 +23,7 @@ export class StrakerVerify implements INodeType {
 		defaults: {
 			name: 'Straker Verify',
 		},
-		// @ts-ignore
 		inputs: ['main'],
-		// @ts-ignore
 		outputs: ['main'],
 		usableAsTool: true,
 		credentials: [
@@ -34,12 +32,6 @@ export class StrakerVerify implements INodeType {
 				required: true,
 			},
 		],
-		requestDefaults: {
-			baseURL: `${STRAKER_VERIFY_BASE_URL}/project`,
-			headers: {
-				Accept: 'application/json',
-			},
-		},
 		properties: [
 			{
 				displayName: 'Resource',
@@ -67,13 +59,14 @@ export class StrakerVerify implements INodeType {
 				const credentials = await this.getCredentials('strakerVerifyApi');
 				const environment = credentials.environment || 'production';
 
-				const response = (await this.helpers.httpRequest({
-					method: 'GET',
-					url: `${STRAKER_VERIFY_BASE_URL}/project/languages?environment=${environment}`,
-					headers: {
-						Authorization: `Bearer ${credentials.apiKey}`,
+				const response = (await this.helpers.httpRequestWithAuthentication.call(
+					this,
+					'strakerVerifyApi',
+					{
+						method: 'GET',
+						url: `${STRAKER_VERIFY_BASE_URL}/project/languages?environment=${environment}`,
 					},
-				})) as Language[];
+				)) as Language[];
 
 				return response.map((lang) => ({
 					name: lang.name,
@@ -85,15 +78,14 @@ export class StrakerVerify implements INodeType {
 				const credentials = await this.getCredentials('strakerVerifyApi');
 				const environment = credentials.environment || 'production';
 
-				const response = (await this.helpers.httpRequest({
-					method: 'GET',
-					url: `${STRAKER_VERIFY_BASE_URL}/project/workflows?environment=${environment}`,
-					headers: {
-						Authorization: `Bearer ${credentials.apiKey}`,
+				const response = (await this.helpers.httpRequestWithAuthentication.call(
+					this,
+					'strakerVerifyApi',
+					{
+						method: 'GET',
+						url: `${STRAKER_VERIFY_BASE_URL}/project/workflows?environment=${environment}`,
 					},
-				})) as Workflow[];
-
-				console.log(response);
+				)) as Workflow[];
 
 				return (response || []).map((workflow) => ({
 					name: workflow.name,
@@ -161,14 +153,15 @@ export class StrakerVerify implements INodeType {
 					const url = `${STRAKER_VERIFY_BASE_URL}/project?app_source=n8n&environment=${environment}`;
 
 					try {
-						const responseData = await this.helpers.httpRequest({
-							method: 'POST',
-							url,
-							headers: {
-								Authorization: `Bearer ${credentials.apiKey}`,
+						const responseData = await this.helpers.httpRequestWithAuthentication.call(
+							this,
+							'strakerVerifyApi',
+							{
+								method: 'POST',
+								url,
+								body: formData,
 							},
-							body: formData,
-						});
+						);
 
 						returnItems.push({ json: responseData });
 					} catch (error: any) {
@@ -182,13 +175,14 @@ export class StrakerVerify implements INodeType {
 
 					const url = `${STRAKER_VERIFY_BASE_URL}/project/${projectId}/files?environment=${environment}`;
 
-					const responseData = await this.helpers.httpRequest({
-						method: 'GET',
-						url,
-						headers: {
-							Authorization: `Bearer ${credentials.apiKey}`,
+					const responseData = await this.helpers.httpRequestWithAuthentication.call(
+						this,
+						'strakerVerifyApi',
+						{
+							method: 'GET',
+							url,
 						},
-					});
+					);
 
 					const files = responseData?.data ?? responseData;
 
