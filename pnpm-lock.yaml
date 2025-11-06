@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      n8n-workflow:
+        specifier: ^1.0.0
+        version: 1.116.0
     devDependencies:
       '@types/jest':
         specifier: ^30.0.0
@@ -29,9 +33,6 @@ importers:
       jest:
         specifier: ^30.2.0
         version: 30.2.0(@types/node@22.18.11)
-      n8n-workflow:
-        specifier: ^1.0.0
-        version: 1.116.0
       prettier:
         specifier: ^3.6.2
         version: 3.6.2
