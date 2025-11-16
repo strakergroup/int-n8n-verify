@@ -11,6 +11,22 @@ import { projectOperations, projectFields } from './StrakerVerifyDescription';
 import { Language, Workflow } from './type';
 import { STRAKER_VERIFY_BASE_URL } from '../../credentials/StrakerVerifyApi.credentials';
 
+async function fetchWorkflows(
+	context: ILoadOptionsFunctions | IExecuteFunctions,
+	environment: string,
+): Promise<Workflow[]> {
+	const response = (await context.helpers.httpRequestWithAuthentication.call(
+		context,
+		'strakerVerifyApi',
+		{
+			method: 'GET',
+			url: `${STRAKER_VERIFY_BASE_URL}/project/workflows?environment=${environment}`,
+		},
+	)) as Workflow[];
+
+	return response || [];
+}
+
 export class StrakerVerify implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Straker Verify',
@@ -76,18 +92,11 @@ export class StrakerVerify implements INodeType {
 
 			async getWorkflows(this: ILoadOptionsFunctions) {
 				const credentials = await this.getCredentials('strakerVerifyApi');
-				const environment = credentials.environment || 'production';
+				const environment = (credentials.environment as string) || 'production';
 
-				const response = (await this.helpers.httpRequestWithAuthentication.call(
-					this,
-					'strakerVerifyApi',
-					{
-						method: 'GET',
-						url: `${STRAKER_VERIFY_BASE_URL}/project/workflows?environment=${environment}`,
-					},
-				)) as Workflow[];
+				const workflows = await fetchWorkflows(this, environment);
 
-				return (response || []).map((workflow) => ({
+				return workflows.map((workflow: Workflow) => ({
 					name: workflow.name,
 					value: workflow.uuid,
 				}));
@@ -100,7 +109,7 @@ export class StrakerVerify implements INodeType {
 		const resource = this.getNodeParameter('resource', 0) as string;
 		const operation = this.getNodeParameter('operation', 0) as string;
 		const credentials = await this.getCredentials('strakerVerifyApi');
-		const environment = credentials.environment || 'production';
+		const environment = (credentials.environment as string) || 'production';
 
 		const returnItems: INodeExecutionData[] = [];
 
@@ -115,6 +124,17 @@ export class StrakerVerify implements INodeType {
 					const callbackUri = this.getNodeParameter('callbackUri', i) as string;
 					const clientNotes = this.getNodeParameter('clientNotes', i, '') as string;
 					const binaryProperty = this.getNodeParameter('binaryProperty', i, 'data') as string;
+
+					// Validate workflow ID
+					const availableWorkflows = await fetchWorkflows(this, environment);
+					const workflowIds = availableWorkflows.map((w: Workflow) => w.uuid);
+					if (!workflowIds.includes(workflow)) {
+						throw new NodeOperationError(
+							this.getNode(),
+							`Invalid workflow ID "${workflow}". Please select a valid workflow from the dropdown.`,
+							{ itemIndex: i },
+						);
+					}
 
 					if (!items.length) {
 						throw new NodeOperationError(

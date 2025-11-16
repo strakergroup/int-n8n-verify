@@ -190,6 +190,9 @@ describe('StrakerVerify Node', () => {
 				project_id: 'project-123',
 				message: 'Project created successfully',
 			};
+			const mockWorkflows: Workflow[] = [
+				{ uuid: 'workflow-1', name: 'Translation Workflow', description: 'Test', active: 'true' },
+			];
 			const binaryData = createMockBinaryData('test.pdf', 'application/pdf');
 			const mockBuffer = Buffer.from('test file content');
 
@@ -213,7 +216,10 @@ describe('StrakerVerify Node', () => {
 			});
 
 			mockFunctions.helpers.getBinaryDataBuffer.mockResolvedValue(mockBuffer);
-			mockFunctions.helpers.httpRequestWithAuthentication.call.mockResolvedValue(mockResponse);
+			// Mock workflow fetch call (for validation) and project creation call
+			mockFunctions.helpers.httpRequestWithAuthentication.call
+				.mockResolvedValueOnce(mockWorkflows) // First call: fetch workflows for validation
+				.mockResolvedValueOnce(mockResponse); // Second call: create project
 
 			const result = await node.execute.call(mockFunctions as any);
 
@@ -226,8 +232,20 @@ describe('StrakerVerify Node', () => {
 			expect(mockFunctions.getNodeParameter).toHaveBeenCalledWith('clientNotes', 0, '');
 			expect(mockFunctions.getNodeParameter).toHaveBeenCalledWith('binaryProperty', 0, 'data');
 
+			// Verify workflow fetch call for validation
+			expect(mockFunctions.helpers.httpRequestWithAuthentication.call).toHaveBeenNthCalledWith(
+				1,
+				mockFunctions,
+				'strakerVerifyApi',
+				{
+					method: 'GET',
+					url: `${STRAKER_VERIFY_BASE_URL}/project/workflows?environment=production`,
+				},
+			);
+
 			expect(mockFunctions.helpers.getBinaryDataBuffer).toHaveBeenCalledWith(0, 'data');
-			expect(mockFunctions.helpers.httpRequestWithAuthentication.call).toHaveBeenCalledWith(
+			expect(mockFunctions.helpers.httpRequestWithAuthentication.call).toHaveBeenNthCalledWith(
+				2,
 				mockFunctions,
 				'strakerVerifyApi',
 				expect.objectContaining({
@@ -239,6 +257,119 @@ describe('StrakerVerify Node', () => {
 
 			expect(result[0]).toHaveLength(1);
 			expect(result[0][0].json).toEqual(mockResponse);
+		});
+
+		it('should throw error when workflow ID is invalid', async () => {
+			const mockFunctions = createMockExecuteFunctions();
+			const mockWorkflows: Workflow[] = [
+				{ uuid: 'workflow-1', name: 'Translation Workflow', description: 'Test', active: 'true' },
+				{ uuid: 'workflow-2', name: 'Review Workflow', description: 'Test', active: 'true' },
+			];
+			const binaryData = createMockBinaryData('test.pdf', 'application/pdf');
+
+			mockFunctions.getInputData.mockReturnValue([
+				createMockExecutionData({}, binaryData),
+			]);
+
+			mockFunctions.getNodeParameter
+				.mockReturnValueOnce('project') // resource
+				.mockReturnValueOnce('create') // operation
+				.mockReturnValueOnce('Test Project') // title
+				.mockReturnValueOnce(['lang-1']) // languages
+				.mockReturnValueOnce('invalid-workflow-id') // workflow - invalid!
+				.mockReturnValueOnce('https://example.com/callback') // callbackUri
+				.mockReturnValueOnce('') // clientNotes
+				.mockReturnValueOnce('data'); // binaryProperty
+
+			mockFunctions.getCredentials.mockResolvedValue({
+				apiKey: 'test-api-key',
+				environment: 'production',
+			});
+
+			mockFunctions.helpers.httpRequestWithAuthentication.call.mockResolvedValue(mockWorkflows);
+
+			try {
+				await node.execute.call(mockFunctions as any);
+				fail('Expected error to be thrown');
+			} catch (error: any) {
+				expect(error).toBeInstanceOf(NodeOperationError);
+				expect(error.message).toContain('Invalid workflow ID "invalid-workflow-id"');
+				expect(error.message).toContain('Please select a valid workflow from the dropdown');
+			}
+		});
+
+		it('should include error message asking to select valid workflow', async () => {
+			const mockFunctions = createMockExecuteFunctions();
+			const mockWorkflows: Workflow[] = [
+				{ uuid: 'workflow-1', name: 'Translation Workflow', description: 'Test', active: 'true' },
+				{ uuid: 'workflow-2', name: 'Review Workflow', description: 'Test', active: 'true' },
+			];
+			const binaryData = createMockBinaryData('test.pdf', 'application/pdf');
+
+			mockFunctions.getInputData.mockReturnValue([
+				createMockExecutionData({}, binaryData),
+			]);
+
+			mockFunctions.getNodeParameter
+				.mockReturnValueOnce('project') // resource
+				.mockReturnValueOnce('create') // operation
+				.mockReturnValueOnce('Test Project') // title
+				.mockReturnValueOnce(['lang-1']) // languages
+				.mockReturnValueOnce('invalid-workflow-id') // workflow - invalid!
+				.mockReturnValueOnce('https://example.com/callback') // callbackUri
+				.mockReturnValueOnce('') // clientNotes
+				.mockReturnValueOnce('data'); // binaryProperty
+
+			mockFunctions.getCredentials.mockResolvedValue({
+				apiKey: 'test-api-key',
+				environment: 'production',
+			});
+
+			mockFunctions.helpers.httpRequestWithAuthentication.call.mockResolvedValue(mockWorkflows);
+
+			try {
+				await node.execute.call(mockFunctions as any);
+				fail('Expected error to be thrown');
+			} catch (error: any) {
+				expect(error).toBeInstanceOf(NodeOperationError);
+				expect(error.message).toContain('Invalid workflow ID "invalid-workflow-id"');
+				expect(error.message).toContain('Please select a valid workflow from the dropdown');
+			}
+		});
+
+		it('should handle empty workflow list in error message', async () => {
+			const mockFunctions = createMockExecuteFunctions();
+			const binaryData = createMockBinaryData('test.pdf', 'application/pdf');
+
+			mockFunctions.getInputData.mockReturnValue([
+				createMockExecutionData({}, binaryData),
+			]);
+
+			mockFunctions.getNodeParameter
+				.mockReturnValueOnce('project') // resource
+				.mockReturnValueOnce('create') // operation
+				.mockReturnValueOnce('Test Project') // title
+				.mockReturnValueOnce(['lang-1']) // languages
+				.mockReturnValueOnce('workflow-1') // workflow
+				.mockReturnValueOnce('https://example.com/callback') // callbackUri
+				.mockReturnValueOnce('') // clientNotes
+				.mockReturnValueOnce('data'); // binaryProperty
+
+			mockFunctions.getCredentials.mockResolvedValue({
+				apiKey: 'test-api-key',
+				environment: 'production',
+			});
+
+			mockFunctions.helpers.httpRequestWithAuthentication.call.mockResolvedValue([]);
+
+			try {
+				await node.execute.call(mockFunctions as any);
+				fail('Expected error to be thrown');
+			} catch (error: any) {
+				expect(error).toBeInstanceOf(NodeOperationError);
+				expect(error.message).toContain('Invalid workflow ID "workflow-1"');
+				expect(error.message).toContain('Please select a valid workflow from the dropdown');
+			}
 		});
 
 		it('should return empty result when no input items received', async () => {
@@ -262,6 +393,9 @@ describe('StrakerVerify Node', () => {
 
 		it('should throw error when binary data is missing', async () => {
 			const mockFunctions = createMockExecuteFunctions();
+			const mockWorkflows: Workflow[] = [
+				{ uuid: 'workflow-1', name: 'Translation Workflow', description: 'Test', active: 'true' },
+			];
 
 			mockFunctions.getInputData.mockReturnValue([
 				createMockExecutionData({}, undefined),
@@ -282,6 +416,8 @@ describe('StrakerVerify Node', () => {
 				environment: 'production',
 			});
 
+			mockFunctions.helpers.httpRequestWithAuthentication.call.mockResolvedValue(mockWorkflows);
+
 			await expect(node.execute.call(mockFunctions as any)).rejects.toThrow(NodeOperationError);
 		});
 
@@ -291,6 +427,9 @@ describe('StrakerVerify Node', () => {
 				project_id: 'project-123',
 				message: 'Project created successfully',
 			};
+			const mockWorkflows: Workflow[] = [
+				{ uuid: 'workflow-1', name: 'Translation Workflow', description: 'Test', active: 'true' },
+			];
 			const binaryData1 = createMockBinaryData('test1.pdf', 'application/pdf');
 			const binaryData2 = createMockBinaryData('test2.pdf', 'application/pdf');
 			const mockBuffer = Buffer.from('test file content');
@@ -316,7 +455,9 @@ describe('StrakerVerify Node', () => {
 			});
 
 			mockFunctions.helpers.getBinaryDataBuffer.mockResolvedValue(mockBuffer);
-			mockFunctions.helpers.httpRequestWithAuthentication.call.mockResolvedValue(mockResponse);
+			mockFunctions.helpers.httpRequestWithAuthentication.call
+				.mockResolvedValueOnce(mockWorkflows) // First call: fetch workflows for validation
+				.mockResolvedValueOnce(mockResponse); // Second call: create project
 
 			const result = await node.execute.call(mockFunctions as any);
 
@@ -326,6 +467,9 @@ describe('StrakerVerify Node', () => {
 
 		it('should handle HTTP request errors', async () => {
 			const mockFunctions = createMockExecuteFunctions();
+			const mockWorkflows: Workflow[] = [
+				{ uuid: 'workflow-1', name: 'Translation Workflow', description: 'Test', active: 'true' },
+			];
 			const binaryData = createMockBinaryData('test.pdf', 'application/pdf');
 			const mockBuffer = Buffer.from('test file content');
 
@@ -349,9 +493,9 @@ describe('StrakerVerify Node', () => {
 			});
 
 			mockFunctions.helpers.getBinaryDataBuffer.mockResolvedValue(mockBuffer);
-			mockFunctions.helpers.httpRequestWithAuthentication.call.mockRejectedValue(
-				new Error('API Error'),
-			);
+			mockFunctions.helpers.httpRequestWithAuthentication.call
+				.mockResolvedValueOnce(mockWorkflows) // First call: fetch workflows for validation
+				.mockRejectedValueOnce(new Error('API Error')); // Second call: create project fails
 
 			await expect(node.execute.call(mockFunctions as any)).rejects.toThrow(NodeOperationError);
 		});
@@ -362,6 +506,9 @@ describe('StrakerVerify Node', () => {
 				project_id: 'project-123',
 				message: 'Project created successfully',
 			};
+			const mockWorkflows: Workflow[] = [
+				{ uuid: 'workflow-1', name: 'Translation Workflow', description: 'Test', active: 'true' },
+			];
 			const binaryData = createMockBinaryData('test.pdf', 'application/pdf');
 			const mockBuffer = Buffer.from('test file content');
 
@@ -386,12 +533,14 @@ describe('StrakerVerify Node', () => {
 			});
 
 			mockFunctions.helpers.getBinaryDataBuffer.mockResolvedValue(mockBuffer);
-			mockFunctions.helpers.httpRequestWithAuthentication.call.mockResolvedValue(mockResponse);
+			mockFunctions.helpers.httpRequestWithAuthentication.call
+				.mockResolvedValueOnce(mockWorkflows) // First call: fetch workflows for validation
+				.mockResolvedValueOnce(mockResponse); // Second call: create project
 
 			const result = await node.execute.call(mockFunctions as any);
 
-			// Should only make one HTTP request even with multiple items
-			expect(mockFunctions.helpers.httpRequestWithAuthentication.call).toHaveBeenCalledTimes(1);
+			// Should make two HTTP requests: one for workflow validation, one for project creation
+			expect(mockFunctions.helpers.httpRequestWithAuthentication.call).toHaveBeenCalledTimes(2);
 			expect(result[0]).toHaveLength(1);
 		});
 	});
