@@ -1,0 +1,269 @@
+{
+  "name": "Simple Straker Verify Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "SETUP (do first)\n1) Settings → Community Nodes → Install → \"n8n-nodes-straker-verify\".\n2) Add credentials:\n   • Google Drive OAuth2 (used by Trigger/Download/Upload)\n   • Straker Verify API (used by Straker nodes)\n3) Create a /Translations folder for outputs.\n4) Activate workflow when ready to test.",
+        "height": 192,
+        "width": 544
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -384,
+        80
+      ],
+      "typeVersion": 1,
+      "id": "aa3ddf03-3930-4298-9796-50470c03ba75",
+      "name": "Sticky: Setup"
+    },
+    {
+      "parameters": {
+        "content": "GOOGLE DRIVE TRIGGER\n\nGoal: fire when a file is CREATED in a specific folder.\n• Trigger On: Specific folder → pick folder\n• Event: File Created\n• Poll: everyMinute (tune as needed)\n\nTest: upload a small file to the watched folder while workflow is executing.",
+        "height": 272,
+        "width": 288
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        192,
+        80
+      ],
+      "typeVersion": 1,
+      "id": "e4d8affb-0872-4e19-909f-8795d071e5cd",
+      "name": "Sticky: Google Trigger"
+    },
+    {
+      "parameters": {
+        "content": "CREATE PROJECT (Straker)\n\nGoal: create a Verify project and upload the source binary.\n\n• Operation: Create Project\n• Title: e.g. ={{ $json.name }} (from Drive file)\n• Input File: binary from previous node (usually \"data\")",
+        "height": 272,
+        "width": 272
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        752,
+        80
+      ],
+      "typeVersion": 1,
+      "id": "5795d2f8-271e-4eab-992c-720e32e60949",
+      "name": "Sticky: Create Project"
+    },
+    {
+      "parameters": {
+        "content": "WEBHOOK (from Straker)\n\nGoal: receive callback when translations are ready.\n\n• Method: POST\n• Path: ={{ $workflow.id }} (unique)\n\nAfter activation: copy the Production URL from this node and set it as the callback in Straker project creation node.",
+        "height": 272,
+        "width": 272
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        192,
+        800
+      ],
+      "typeVersion": 1,
+      "id": "bede4842-8946-44a4-8ca0-1d06e6870722",
+      "name": "Sticky: Webhook"
+    },
+    {
+      "parameters": {
+        "content": "DOWNLOAD TRANSLATIONS (Straker)\n\nGoal: fetch completed files for the project/job.\n\n• Operation: Download Files\n• (If required) Map job uuid from Webhook: e.g. ={{ $json.body.job_uuid }}\n\nReturns: one or more binaries (key often \"data\").",
+        "height": 272,
+        "width": 256
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        480,
+        800
+      ],
+      "typeVersion": 1,
+      "id": "6b60ca5a-0c14-4521-a7e4-707a648d45aa",
+      "name": "Sticky: Download Translations"
+    },
+    {
+      "parameters": {
+        "content": "UPLOAD TO GOOGLE DRIVE\n\nGoal: store translated files.\n• Drive/Folder: select destination (/Translations recommended)",
+        "height": 272,
+        "width": 272
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        752,
+        800
+      ],
+      "typeVersion": 1,
+      "id": "12c1ce21-1c50-4ba6-96d2-77479bca8c6c",
+      "name": "Sticky: Upload to Drive"
+    },
+    {
+      "parameters": {
+        "title": "test"
+      },
+      "type": "n8n-nodes-straker-verify.strakerVerify",
+      "typeVersion": 1,
+      "position": [
+        784,
+        400
+      ],
+      "id": "f5871554-3a6a-4113-8e64-9551e3a18078",
+      "name": "Create a new project",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        560,
+        400
+      ],
+      "id": "bbc2b9f9-0dc6-4b24-b1d4-350ce3f256bf",
+      "name": "Download file",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "event": "fileCreated",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [
+        336,
+        400
+      ],
+      "id": "e047f8b3-413a-401c-89ce-70c3c1ffb961",
+      "name": "Google Drive Trigger"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "={{ $workflow.id }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        336,
+        624
+      ],
+      "id": "179bc77d-75ce-421f-ab7c-5227eaaac8e2",
+      "name": "Webhook",
+      "webhookId": "88b41daa-43c3-4b97-801b-749b6646340e"
+    },
+    {
+      "parameters": {
+        "operation": "downloadFiles"
+      },
+      "type": "n8n-nodes-straker-verify.strakerVerify",
+      "typeVersion": 1,
+      "position": [
+        560,
+        624
+      ],
+      "id": "03d7c7aa-e867-48c7-a21e-b5097f964f87",
+      "name": "Download translated files",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "root",
+          "cachedResultName": "/ (Root folder)"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        784,
+        624
+      ],
+      "id": "c36fc3d5-f0b2-42b0-87dd-a8cc858617b9",
+      "name": "Upload file",
+      "notesInFlow": true
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Download file": {
+      "main": [
+        [
+          {
+            "node": "Create a new project",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive Trigger": {
+      "main": [
+        [
+          {
+            "node": "Download file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Download translated files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download translated files": {
+      "main": [
+        [
+          {
+            "node": "Upload file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "9e9c1cc3-87a1-4737-8563-542e2554661e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "aaa9402664f1a41f40ebbc52c9993eb66aeb366602958fdfaa283b71e64db123"
+  },
+  "id": "Hr6YWMMNin3nZbai",
+  "tags": []
+}
