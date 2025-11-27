@@ -117,6 +117,36 @@ describe('StrakerVerify Node', () => {
 				},
 			);
 		});
+
+		it('should handle 403 subscription expired error', async () => {
+			const mockFunctions = createMockLoadOptionsFunctions();
+			const subscriptionError = {
+				response: {
+					statusCode: 403,
+					body: {
+						detail: 'Your subscription has expired. Please renew your subscription to continue using the API.',
+					},
+				},
+				message: 'Forbidden',
+			};
+
+			mockFunctions.getCredentials.mockResolvedValue({
+				apiKey: 'test-api-key',
+				environment: 'production',
+			});
+
+			mockFunctions.helpers.httpRequestWithAuthentication.call.mockRejectedValue(subscriptionError);
+
+			try {
+				await node.methods.loadOptions.getLanguages.call(mockFunctions as any);
+				fail('Expected error to be thrown');
+			} catch (error: any) {
+				expect(error).toBeInstanceOf(NodeOperationError);
+				expect(error.message).toBe(
+					'Your subscription has expired. Please renew your subscription to continue using the API.',
+				);
+			}
+		});
 	});
 
 	describe('LoadOptions - getWorkflows', () => {
@@ -180,6 +210,36 @@ describe('StrakerVerify Node', () => {
 			const result = await node.methods.loadOptions.getWorkflows.call(mockFunctions as any);
 
 			expect(result).toEqual([]);
+		});
+
+		it('should handle 403 subscription expired error', async () => {
+			const mockFunctions = createMockLoadOptionsFunctions();
+			const subscriptionError = {
+				response: {
+					statusCode: 403,
+					body: {
+						detail: 'Your subscription has expired. Please renew your subscription to continue using the API.',
+					},
+				},
+				message: 'Forbidden',
+			};
+
+			mockFunctions.getCredentials.mockResolvedValue({
+				apiKey: 'test-api-key',
+				environment: 'production',
+			});
+
+			mockFunctions.helpers.httpRequestWithAuthentication.call.mockRejectedValue(subscriptionError);
+
+			try {
+				await node.methods.loadOptions.getWorkflows.call(mockFunctions as any);
+				fail('Expected error to be thrown');
+			} catch (error: any) {
+				expect(error).toBeInstanceOf(NodeOperationError);
+				expect(error.message).toBe(
+					'Your subscription has expired. Please renew your subscription to continue using the API.',
+				);
+			}
 		});
 	});
 
@@ -500,6 +560,58 @@ describe('StrakerVerify Node', () => {
 			await expect(node.execute.call(mockFunctions as any)).rejects.toThrow(NodeOperationError);
 		});
 
+		it('should handle 403 subscription expired error on create', async () => {
+			const mockFunctions = createMockExecuteFunctions();
+			const mockWorkflows: Workflow[] = [
+				{ uuid: 'workflow-1', name: 'Translation Workflow', description: 'Test', active: 'true' },
+			];
+			const binaryData = createMockBinaryData('test.pdf', 'application/pdf');
+			const mockBuffer = Buffer.from('test file content');
+			const subscriptionError = {
+				response: {
+					statusCode: 403,
+					body: {
+						detail: 'Your subscription has expired. Please renew your subscription to continue using the API.',
+					},
+				},
+				message: 'Forbidden',
+			};
+
+			mockFunctions.getInputData.mockReturnValue([
+				createMockExecutionData({}, binaryData),
+			]);
+
+			mockFunctions.getNodeParameter
+				.mockReturnValueOnce('project') // resource
+				.mockReturnValueOnce('create') // operation
+				.mockReturnValueOnce('Test Project') // title
+				.mockReturnValueOnce(['lang-1']) // languages
+				.mockReturnValueOnce('workflow-1') // workflow
+				.mockReturnValueOnce('https://example.com/callback') // callbackUri
+				.mockReturnValueOnce('') // clientNotes
+				.mockReturnValueOnce('data'); // binaryProperty
+
+			mockFunctions.getCredentials.mockResolvedValue({
+				apiKey: 'test-api-key',
+				environment: 'production',
+			});
+
+			mockFunctions.helpers.getBinaryDataBuffer.mockResolvedValue(mockBuffer);
+			mockFunctions.helpers.httpRequestWithAuthentication.call
+				.mockResolvedValueOnce(mockWorkflows) // First call: fetch workflows for validation
+				.mockRejectedValueOnce(subscriptionError); // Second call: create project fails with 403
+
+			try {
+				await node.execute.call(mockFunctions as any);
+				fail('Expected error to be thrown');
+			} catch (error: any) {
+				expect(error).toBeInstanceOf(NodeOperationError);
+				expect(error.message).toBe(
+					'Your subscription has expired. Please renew your subscription to continue using the API.',
+				);
+			}
+		});
+
 		it('should only process first item for create operation', async () => {
 			const mockFunctions = createMockExecuteFunctions();
 			const mockResponse = {
@@ -786,6 +898,46 @@ describe('StrakerVerify Node', () => {
 				expect.any(Buffer),
 				'file',
 			);
+		});
+
+		it('should handle 403 subscription expired error on downloadFiles', async () => {
+			const mockFunctions = createMockExecuteFunctions();
+			const subscriptionError = {
+				response: {
+					statusCode: 403,
+					body: {
+						detail: 'Your subscription has expired. Please renew your subscription to continue using the API.',
+					},
+				},
+				message: 'Forbidden',
+			};
+
+			mockFunctions.getInputData.mockReturnValue([
+				createMockExecutionData({ projectId: 'project-123' }),
+			]);
+
+			mockFunctions.getNodeParameter
+				.mockReturnValueOnce('project') // resource
+				.mockReturnValueOnce('downloadFiles') // operation
+				.mockReturnValueOnce('project-123') // projectId
+				.mockReturnValueOnce('data'); // binaryProperty
+
+			mockFunctions.getCredentials.mockResolvedValue({
+				apiKey: 'test-api-key',
+				environment: 'production',
+			});
+
+			mockFunctions.helpers.httpRequestWithAuthentication.call.mockRejectedValue(subscriptionError);
+
+			try {
+				await node.execute.call(mockFunctions as any);
+				fail('Expected error to be thrown');
+			} catch (error: any) {
+				expect(error).toBeInstanceOf(NodeOperationError);
+				expect(error.message).toBe(
+					'Your subscription has expired. Please renew your subscription to continue using the API.',
+				);
+			}
 		});
 	});
 });

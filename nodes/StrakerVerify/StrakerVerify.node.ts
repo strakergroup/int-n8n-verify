@@ -15,16 +15,29 @@ async function fetchWorkflows(
 	context: ILoadOptionsFunctions | IExecuteFunctions,
 	environment: string,
 ): Promise<Workflow[]> {
-	const response = (await context.helpers.httpRequestWithAuthentication.call(
-		context,
-		'strakerVerifyApi',
-		{
-			method: 'GET',
-			url: `${STRAKER_VERIFY_BASE_URL}/project/workflows?environment=${environment}`,
-		},
-	)) as Workflow[];
+	try {
+		const response = (await context.helpers.httpRequestWithAuthentication.call(
+			context,
+			'strakerVerifyApi',
+			{
+				method: 'GET',
+				url: `${STRAKER_VERIFY_BASE_URL}/project/workflows?environment=${environment}`,
+			},
+		)) as Workflow[];
 
-	return response || [];
+		return response || [];
+	} catch (error: any) {
+		// Preserve original error message, especially for subscription errors (403)
+		let errorMessage = 'Failed to fetch workflows.';
+		if (error.response?.statusCode === 403 && error.response?.body?.detail) {
+			errorMessage = error.response.body.detail;
+		} else if (error.response?.body?.detail) {
+			errorMessage = error.response.body.detail;
+		} else if (error.message) {
+			errorMessage = error.message;
+		}
+		throw new NodeOperationError(context.getNode(), errorMessage);
+	}
 }
 
 export class StrakerVerify implements INodeType {
@@ -75,19 +88,32 @@ export class StrakerVerify implements INodeType {
 				const credentials = await this.getCredentials('strakerVerifyApi');
 				const environment = credentials.environment || 'production';
 
-				const response = (await this.helpers.httpRequestWithAuthentication.call(
-					this,
-					'strakerVerifyApi',
-					{
-						method: 'GET',
-						url: `${STRAKER_VERIFY_BASE_URL}/project/languages?environment=${environment}`,
-					},
-				)) as Language[];
+				try {
+					const response = (await this.helpers.httpRequestWithAuthentication.call(
+						this,
+						'strakerVerifyApi',
+						{
+							method: 'GET',
+							url: `${STRAKER_VERIFY_BASE_URL}/project/languages?environment=${environment}`,
+						},
+					)) as Language[];
 
-				return response.map((lang) => ({
-					name: lang.name,
-					value: lang.uuid,
-				}));
+					return response.map((lang) => ({
+						name: lang.name,
+						value: lang.uuid,
+					}));
+				} catch (error: any) {
+					// Preserve original error message, especially for subscription errors (403)
+					let errorMessage = 'Failed to fetch languages.';
+					if (error.response?.statusCode === 403 && error.response?.body?.detail) {
+						errorMessage = error.response.body.detail;
+					} else if (error.response?.body?.detail) {
+						errorMessage = error.response.body.detail;
+					} else if (error.message) {
+						errorMessage = error.message;
+					}
+					throw new NodeOperationError(this.getNode(), errorMessage);
+				}
 			},
 
 			async getWorkflows(this: ILoadOptionsFunctions) {
@@ -185,7 +211,16 @@ export class StrakerVerify implements INodeType {
 
 						returnItems.push({ json: responseData });
 					} catch (error: any) {
-						throw new NodeOperationError(this.getNode(), 'Failed to create project.');
+						// Preserve original error message, especially for subscription errors (403)
+						let errorMessage = 'Failed to create project.';
+						if (error.response?.statusCode === 403 && error.response?.body?.detail) {
+							errorMessage = error.response.body.detail;
+						} else if (error.response?.body?.detail) {
+							errorMessage = error.response.body.detail;
+						} else if (error.message) {
+							errorMessage = error.message;
+						}
+						throw new NodeOperationError(this.getNode(), errorMessage);
 					}
 
 					break;
@@ -195,14 +230,28 @@ export class StrakerVerify implements INodeType {
 
 					const url = `${STRAKER_VERIFY_BASE_URL}/project/${projectId}/files?environment=${environment}`;
 
-					const responseData = await this.helpers.httpRequestWithAuthentication.call(
-						this,
-						'strakerVerifyApi',
-						{
-							method: 'GET',
-							url,
-						},
-					);
+					let responseData;
+					try {
+						responseData = await this.helpers.httpRequestWithAuthentication.call(
+							this,
+							'strakerVerifyApi',
+							{
+								method: 'GET',
+								url,
+							},
+						);
+					} catch (error: any) {
+						// Preserve original error message, especially for subscription errors (403)
+						let errorMessage = 'Failed to download project files.';
+						if (error.response?.statusCode === 403 && error.response?.body?.detail) {
+							errorMessage = error.response.body.detail;
+						} else if (error.response?.body?.detail) {
+							errorMessage = error.response.body.detail;
+						} else if (error.message) {
+							errorMessage = error.message;
+						}
+						throw new NodeOperationError(this.getNode(), errorMessage, { itemIndex: i });
+					}
 
 					const files = responseData?.data ?? responseData;
 

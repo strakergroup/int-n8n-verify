@@ -20,6 +20,7 @@ export interface MockExecuteFunctions {
 
 export interface MockLoadOptionsFunctions {
 	getCredentials: jest.Mock;
+	getNode: jest.Mock;
 	helpers: {
 		httpRequestWithAuthentication: {
 			call: jest.Mock;
@@ -61,6 +62,13 @@ export const createMockLoadOptionsFunctions = (): MockLoadOptionsFunctions => {
 
 	return {
 		getCredentials: jest.fn(),
+		getNode: jest.fn(() => ({
+			id: 'test-node-id',
+			name: 'Straker Verify',
+			type: 'strakerVerify',
+			typeVersion: 1,
+			position: [0, 0],
+		})),
 		helpers: mockHelpers as any,
 	};
 };
