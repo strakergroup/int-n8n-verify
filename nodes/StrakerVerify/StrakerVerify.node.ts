@@ -5,12 +5,42 @@ import {
 	INodeTypeDescription,
 	IBinaryData,
 	NodeOperationError,
+	NodeApiError,
 	ILoadOptionsFunctions,
 	ApplicationError,
 } from 'n8n-workflow';
 import { projectOperations, projectFields } from './StrakerVerifyDescription';
 import { Language, Workflow } from './type';
 import { STRAKER_VERIFY_BASE_URL } from '../../credentials/StrakerVerifyApi.credentials';
+
+/**
+ * Extracts a user-friendly error message from an n8n HTTP error.
+ * Checks multiple possible locations for the API's detail message.
+ */
+function extractApiErrorMessage(error: any, fallback: string): string {
+	// Check various possible locations for the API error detail
+	const detail =
+		error.description ||
+		error.cause?.response?.body?.detail ||
+		error.response?.body?.detail ||
+		error.body?.detail ||
+		(typeof error.body === 'string' ? tryParseJsonDetail(error.body) : null) ||
+		error.message;
+
+	return detail || fallback;
+}
+
+/**
+ * Attempts to parse a JSON string and extract the detail field.
+ */
+function tryParseJsonDetail(body: string): string | null {
+	try {
+		const parsed = JSON.parse(body);
+		return parsed.detail || null;
+	} catch {
+		return null;
+	}
+}
 
 async function fetchWorkflows(
 	context: ILoadOptionsFunctions | IExecuteFunctions,
@@ -28,15 +58,7 @@ async function fetchWorkflows(
 
 		return response || [];
 	} catch (error: any) {
-		// Preserve original error message, especially for subscription errors (403)
-		let errorMessage = 'Failed to fetch workflows.';
-		if (error.response?.statusCode === 403 && error.response?.body?.detail) {
-			errorMessage = error.response.body.detail;
-		} else if (error.response?.body?.detail) {
-			errorMessage = error.response.body.detail;
-		} else if (error.message) {
-			errorMessage = error.message;
-		}
+		const errorMessage = extractApiErrorMessage(error, 'Failed to fetch workflows.');
 		throw new NodeOperationError(context.getNode(), errorMessage);
 	}
 }
@@ -104,16 +126,8 @@ export class StrakerVerify implements INodeType {
 						value: lang.uuid,
 					}));
 				} catch (error: any) {
-					// Preserve original error message, especially for subscription errors (403)
 					// For loadOptions, use ApplicationError which serializes properly
-					let errorMessage = 'Failed to fetch languages.';
-					if (error.response?.statusCode === 403 && error.response?.body?.detail) {
-						errorMessage = error.response.body.detail;
-					} else if (error.response?.body?.detail) {
-						errorMessage = error.response.body.detail;
-					} else if (error.message) {
-						errorMessage = error.message;
-					}
+					const errorMessage = extractApiErrorMessage(error, 'Failed to fetch languages.');
 					throw new ApplicationError(errorMessage);
 				}
 			},
@@ -130,17 +144,9 @@ export class StrakerVerify implements INodeType {
 					}));
 				} catch (error: any) {
 					// For loadOptions, use ApplicationError which serializes properly
-					// Extract error message, prioritizing 403 subscription errors
-					let errorMessage = 'Failed to fetch workflows.';
-					if (error instanceof NodeOperationError) {
-						errorMessage = error.message;
-					} else if (error.response?.statusCode === 403 && error.response?.body?.detail) {
-						errorMessage = error.response.body.detail;
-					} else if (error.response?.body?.detail) {
-						errorMessage = error.response.body.detail;
-					} else if (error.message) {
-						errorMessage = error.message;
-					}
+					const errorMessage = error instanceof NodeOperationError
+						? error.message
+						: extractApiErrorMessage(error, 'Failed to fetch workflows.');
 					throw new ApplicationError(errorMessage);
 				}
 			},
@@ -228,16 +234,8 @@ export class StrakerVerify implements INodeType {
 
 						returnItems.push({ json: responseData });
 					} catch (error: any) {
-						// Preserve original error message, especially for subscription errors (403)
-						let errorMessage = 'Failed to create project.';
-						if (error.response?.statusCode === 403 && error.response?.body?.detail) {
-							errorMessage = error.response.body.detail;
-						} else if (error.response?.body?.detail) {
-							errorMessage = error.response.body.detail;
-						} else if (error.message) {
-							errorMessage = error.message;
-						}
-						throw new NodeOperationError(this.getNode(), errorMessage);
+						const errorMessage = extractApiErrorMessage(error, 'Failed to create project.');
+						throw new NodeApiError(this.getNode(), error, { message: errorMessage });
 					}
 
 					break;
@@ -258,16 +256,8 @@ export class StrakerVerify implements INodeType {
 							},
 						);
 					} catch (error: any) {
-						// Preserve original error message, especially for subscription errors (403)
-						let errorMessage = 'Failed to download project files.';
-						if (error.response?.statusCode === 403 && error.response?.body?.detail) {
-							errorMessage = error.response.body.detail;
-						} else if (error.response?.body?.detail) {
-							errorMessage = error.response.body.detail;
-						} else if (error.message) {
-							errorMessage = error.message;
-						}
-						throw new NodeOperationError(this.getNode(), errorMessage, { itemIndex: i });
+						const errorMessage = extractApiErrorMessage(error, 'Failed to download project files.');
+						throw new NodeApiError(this.getNode(), error, { message: errorMessage, itemIndex: i });
 					}
 
 					const files = responseData?.data ?? responseData;

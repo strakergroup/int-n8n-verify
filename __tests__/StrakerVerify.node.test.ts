@@ -1,5 +1,5 @@
 import { StrakerVerify } from '../nodes/StrakerVerify/StrakerVerify.node';
-import { NodeOperationError, ApplicationError } from 'n8n-workflow';
+import { NodeOperationError, NodeApiError, ApplicationError } from 'n8n-workflow';
 import {
 	createMockExecuteFunctions,
 	createMockLoadOptionsFunctions,
@@ -557,7 +557,7 @@ describe('StrakerVerify Node', () => {
 				.mockResolvedValueOnce(mockWorkflows) // First call: fetch workflows for validation
 				.mockRejectedValueOnce(new Error('API Error')); // Second call: create project fails
 
-			await expect(node.execute.call(mockFunctions as any)).rejects.toThrow(NodeOperationError);
+			await expect(node.execute.call(mockFunctions as any)).rejects.toThrow(NodeApiError);
 		});
 
 		it('should handle 403 subscription expired error on create', async () => {
@@ -605,7 +605,7 @@ describe('StrakerVerify Node', () => {
 				await node.execute.call(mockFunctions as any);
 				fail('Expected error to be thrown');
 			} catch (error: any) {
-				expect(error).toBeInstanceOf(NodeOperationError);
+				expect(error).toBeInstanceOf(NodeApiError);
 				expect(error.message).toBe(
 					'Your subscription has expired. Please renew your subscription to continue using the API.',
 				);
@@ -933,7 +933,7 @@ describe('StrakerVerify Node', () => {
 				await node.execute.call(mockFunctions as any);
 				fail('Expected error to be thrown');
 			} catch (error: any) {
-				expect(error).toBeInstanceOf(NodeOperationError);
+				expect(error).toBeInstanceOf(NodeApiError);
 				expect(error.message).toBe(
 					'Your subscription has expired. Please renew your subscription to continue using the API.',
 				);
