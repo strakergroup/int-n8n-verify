@@ -1,5 +1,5 @@
 import { StrakerVerify } from '../nodes/StrakerVerify/StrakerVerify.node';
-import { NodeOperationError } from 'n8n-workflow';
+import { NodeOperationError, ApplicationError } from 'n8n-workflow';
 import {
 	createMockExecuteFunctions,
 	createMockLoadOptionsFunctions,
@@ -141,7 +141,7 @@ describe('StrakerVerify Node', () => {
 				await node.methods.loadOptions.getLanguages.call(mockFunctions as any);
 				fail('Expected error to be thrown');
 			} catch (error: any) {
-				expect(error).toBeInstanceOf(NodeOperationError);
+				expect(error).toBeInstanceOf(ApplicationError);
 				expect(error.message).toBe(
 					'Your subscription has expired. Please renew your subscription to continue using the API.',
 				);
@@ -235,7 +235,7 @@ describe('StrakerVerify Node', () => {
 				await node.methods.loadOptions.getWorkflows.call(mockFunctions as any);
 				fail('Expected error to be thrown');
 			} catch (error: any) {
-				expect(error).toBeInstanceOf(NodeOperationError);
+				expect(error).toBeInstanceOf(ApplicationError);
 				expect(error.message).toBe(
 					'Your subscription has expired. Please renew your subscription to continue using the API.',
 				);

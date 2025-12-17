@@ -6,6 +6,7 @@ import {
 	IBinaryData,
 	NodeOperationError,
 	ILoadOptionsFunctions,
+	ApplicationError,
 } from 'n8n-workflow';
 import { projectOperations, projectFields } from './StrakerVerifyDescription';
 import { Language, Workflow } from './type';
@@ -104,6 +105,7 @@ export class StrakerVerify implements INodeType {
 					}));
 				} catch (error: any) {
 					// Preserve original error message, especially for subscription errors (403)
+					// For loadOptions, use ApplicationError which serializes properly
 					let errorMessage = 'Failed to fetch languages.';
 					if (error.response?.statusCode === 403 && error.response?.body?.detail) {
 						errorMessage = error.response.body.detail;
@@ -112,7 +114,7 @@ export class StrakerVerify implements INodeType {
 					} else if (error.message) {
 						errorMessage = error.message;
 					}
-					throw new NodeOperationError(this.getNode(), errorMessage);
+					throw new ApplicationError(errorMessage);
 				}
 			},
 
@@ -120,12 +122,27 @@ export class StrakerVerify implements INodeType {
 				const credentials = await this.getCredentials('strakerVerifyApi');
 				const environment = (credentials.environment as string) || 'production';
 
-				const workflows = await fetchWorkflows(this, environment);
-
-				return workflows.map((workflow: Workflow) => ({
-					name: workflow.name,
-					value: workflow.uuid,
-				}));
+				try {
+					const workflows = await fetchWorkflows(this, environment);
+					return workflows.map((workflow: Workflow) => ({
+						name: workflow.name,
+						value: workflow.uuid,
+					}));
+				} catch (error: any) {
+					// For loadOptions, use ApplicationError which serializes properly
+					// Extract error message, prioritizing 403 subscription errors
+					let errorMessage = 'Failed to fetch workflows.';
+					if (error instanceof NodeOperationError) {
+						errorMessage = error.message;
+					} else if (error.response?.statusCode === 403 && error.response?.body?.detail) {
+						errorMessage = error.response.body.detail;
+					} else if (error.response?.body?.detail) {
+						errorMessage = error.response.body.detail;
+					} else if (error.message) {
+						errorMessage = error.message;
+					}
+					throw new ApplicationError(errorMessage);
+				}
 			},
 		},
 	};
