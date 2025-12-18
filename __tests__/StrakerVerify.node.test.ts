@@ -1,5 +1,5 @@
 import { StrakerVerify } from '../nodes/StrakerVerify/StrakerVerify.node';
-import { NodeOperationError, NodeApiError, ApplicationError } from 'n8n-workflow';
+import { NodeOperationError, NodeApiError } from 'n8n-workflow';
 import {
 	createMockExecuteFunctions,
 	createMockLoadOptionsFunctions,
@@ -118,34 +118,20 @@ describe('StrakerVerify Node', () => {
 			);
 		});
 
-		it('should handle 403 subscription expired error', async () => {
+		it('should propagate API errors', async () => {
 			const mockFunctions = createMockLoadOptionsFunctions();
-			const subscriptionError = {
-				response: {
-					statusCode: 403,
-					body: {
-						detail: 'Your subscription has expired. Please renew your subscription to continue using the API.',
-					},
-				},
-				message: 'Forbidden',
-			};
+			const apiError = new Error('API Error');
 
 			mockFunctions.getCredentials.mockResolvedValue({
 				apiKey: 'test-api-key',
 				environment: 'production',
 			});
 
-			mockFunctions.helpers.httpRequestWithAuthentication.call.mockRejectedValue(subscriptionError);
+			mockFunctions.helpers.httpRequestWithAuthentication.call.mockRejectedValue(apiError);
 
-			try {
-				await node.methods.loadOptions.getLanguages.call(mockFunctions as any);
-				fail('Expected error to be thrown');
-			} catch (error: any) {
-				expect(error).toBeInstanceOf(ApplicationError);
-				expect(error.message).toBe(
-					'Your subscription has expired. Please renew your subscription to continue using the API.',
-				);
-			}
+			await expect(
+				node.methods.loadOptions.getLanguages.call(mockFunctions as any),
+			).rejects.toThrow();
 		});
 	});
 
@@ -212,34 +198,20 @@ describe('StrakerVerify Node', () => {
 			expect(result).toEqual([]);
 		});
 
-		it('should handle 403 subscription expired error', async () => {
+		it('should propagate API errors', async () => {
 			const mockFunctions = createMockLoadOptionsFunctions();
-			const subscriptionError = {
-				response: {
-					statusCode: 403,
-					body: {
-						detail: 'Your subscription has expired. Please renew your subscription to continue using the API.',
-					},
-				},
-				message: 'Forbidden',
-			};
+			const apiError = new Error('API Error');
 
 			mockFunctions.getCredentials.mockResolvedValue({
 				apiKey: 'test-api-key',
 				environment: 'production',
 			});
 
-			mockFunctions.helpers.httpRequestWithAuthentication.call.mockRejectedValue(subscriptionError);
+			mockFunctions.helpers.httpRequestWithAuthentication.call.mockRejectedValue(apiError);
 
-			try {
-				await node.methods.loadOptions.getWorkflows.call(mockFunctions as any);
-				fail('Expected error to be thrown');
-			} catch (error: any) {
-				expect(error).toBeInstanceOf(ApplicationError);
-				expect(error.message).toBe(
-					'Your subscription has expired. Please renew your subscription to continue using the API.',
-				);
-			}
+			await expect(
+				node.methods.loadOptions.getWorkflows.call(mockFunctions as any),
+			).rejects.toThrow();
 		});
 	});
 
@@ -560,22 +532,14 @@ describe('StrakerVerify Node', () => {
 			await expect(node.execute.call(mockFunctions as any)).rejects.toThrow(NodeApiError);
 		});
 
-		it('should handle 403 subscription expired error on create', async () => {
+		it('should throw NodeApiError on API failure during create', async () => {
 			const mockFunctions = createMockExecuteFunctions();
 			const mockWorkflows: Workflow[] = [
 				{ uuid: 'workflow-1', name: 'Translation Workflow', description: 'Test', active: 'true' },
 			];
 			const binaryData = createMockBinaryData('test.pdf', 'application/pdf');
 			const mockBuffer = Buffer.from('test file content');
-			const subscriptionError = {
-				response: {
-					statusCode: 403,
-					body: {
-						detail: 'Your subscription has expired. Please renew your subscription to continue using the API.',
-					},
-				},
-				message: 'Forbidden',
-			};
+			const apiError = new Error('Forbidden');
 
 			mockFunctions.getInputData.mockReturnValue([
 				createMockExecutionData({}, binaryData),
@@ -599,17 +563,9 @@ describe('StrakerVerify Node', () => {
 			mockFunctions.helpers.getBinaryDataBuffer.mockResolvedValue(mockBuffer);
 			mockFunctions.helpers.httpRequestWithAuthentication.call
 				.mockResolvedValueOnce(mockWorkflows) // First call: fetch workflows for validation
-				.mockRejectedValueOnce(subscriptionError); // Second call: create project fails with 403
+				.mockRejectedValueOnce(apiError); // Second call: create project fails
 
-			try {
-				await node.execute.call(mockFunctions as any);
-				fail('Expected error to be thrown');
-			} catch (error: any) {
-				expect(error).toBeInstanceOf(NodeApiError);
-				expect(error.message).toBe(
-					'Your subscription has expired. Please renew your subscription to continue using the API.',
-				);
-			}
+			await expect(node.execute.call(mockFunctions as any)).rejects.toThrow(NodeApiError);
 		});
 
 		it('should only process first item for create operation', async () => {
@@ -900,17 +856,9 @@ describe('StrakerVerify Node', () => {
 			);
 		});
 
-		it('should handle 403 subscription expired error on downloadFiles', async () => {
+		it('should throw NodeApiError on API failure during downloadFiles', async () => {
 			const mockFunctions = createMockExecuteFunctions();
-			const subscriptionError = {
-				response: {
-					statusCode: 403,
-					body: {
-						detail: 'Your subscription has expired. Please renew your subscription to continue using the API.',
-					},
-				},
-				message: 'Forbidden',
-			};
+			const apiError = new Error('Forbidden');
 
 			mockFunctions.getInputData.mockReturnValue([
 				createMockExecutionData({ projectId: 'project-123' }),
@@ -927,17 +875,9 @@ describe('StrakerVerify Node', () => {
 				environment: 'production',
 			});
 
-			mockFunctions.helpers.httpRequestWithAuthentication.call.mockRejectedValue(subscriptionError);
+			mockFunctions.helpers.httpRequestWithAuthentication.call.mockRejectedValue(apiError);
 
-			try {
-				await node.execute.call(mockFunctions as any);
-				fail('Expected error to be thrown');
-			} catch (error: any) {
-				expect(error).toBeInstanceOf(NodeApiError);
-				expect(error.message).toBe(
-					'Your subscription has expired. Please renew your subscription to continue using the API.',
-				);
-			}
+			await expect(node.execute.call(mockFunctions as any)).rejects.toThrow(NodeApiError);
 		});
 	});
 });

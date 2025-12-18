@@ -14,53 +14,29 @@ import { Language, Workflow } from './type';
 import { STRAKER_VERIFY_BASE_URL } from '../../credentials/StrakerVerifyApi.credentials';
 
 /**
- * Extracts a user-friendly error message from an n8n HTTP error.
- * Checks multiple possible locations for the API's detail message.
+ * Extracts the API error detail message from the error response.
+ * The Straker Verify API returns errors in format: { detail: "message" }
+ * n8n stores the response body in error.context.data
  */
-function extractApiErrorMessage(error: any, fallback: string): string {
-	// Check various possible locations for the API error detail
-	const detail =
-		error.description ||
-		error.cause?.response?.body?.detail ||
-		error.response?.body?.detail ||
-		error.body?.detail ||
-		(typeof error.body === 'string' ? tryParseJsonDetail(error.body) : null) ||
-		error.message;
-
-	return detail || fallback;
-}
-
-/**
- * Attempts to parse a JSON string and extract the detail field.
- */
-function tryParseJsonDetail(body: string): string | null {
-	try {
-		const parsed = JSON.parse(body);
-		return parsed.detail || null;
-	} catch {
-		return null;
-	}
+function getApiErrorDetail(error: any): string | undefined {
+	// n8n stores response body in context.data
+	return error?.context?.data?.detail;
 }
 
 async function fetchWorkflows(
 	context: ILoadOptionsFunctions | IExecuteFunctions,
 	environment: string,
 ): Promise<Workflow[]> {
-	try {
-		const response = (await context.helpers.httpRequestWithAuthentication.call(
-			context,
-			'strakerVerifyApi',
-			{
-				method: 'GET',
-				url: `${STRAKER_VERIFY_BASE_URL}/project/workflows?environment=${environment}`,
-			},
-		)) as Workflow[];
+	const response = (await context.helpers.httpRequestWithAuthentication.call(
+		context,
+		'strakerVerifyApi',
+		{
+			method: 'GET',
+			url: `${STRAKER_VERIFY_BASE_URL}/project/workflows?environment=${environment}`,
+		},
+	)) as Workflow[];
 
-		return response || [];
-	} catch (error: any) {
-		const errorMessage = extractApiErrorMessage(error, 'Failed to fetch workflows.');
-		throw new NodeOperationError(context.getNode(), errorMessage);
-	}
+	return response || [];
 }
 
 export class StrakerVerify implements INodeType {
@@ -126,9 +102,9 @@ export class StrakerVerify implements INodeType {
 						value: lang.uuid,
 					}));
 				} catch (error: any) {
-					// For loadOptions, use ApplicationError which serializes properly
-					const errorMessage = extractApiErrorMessage(error, 'Failed to fetch languages.');
-					throw new ApplicationError(errorMessage);
+					// For loadOptions, ApplicationError serializes properly (unlike NodeApiError)
+					const detail = getApiErrorDetail(error);
+					throw new ApplicationError(detail || error.message || 'Failed to load languages');
 				}
 			},
 
@@ -143,11 +119,9 @@ export class StrakerVerify implements INodeType {
 						value: workflow.uuid,
 					}));
 				} catch (error: any) {
-					// For loadOptions, use ApplicationError which serializes properly
-					const errorMessage = error instanceof NodeOperationError
-						? error.message
-						: extractApiErrorMessage(error, 'Failed to fetch workflows.');
-					throw new ApplicationError(errorMessage);
+					// For loadOptions, ApplicationError serializes properly (unlike NodeApiError)
+					const detail = getApiErrorDetail(error);
+					throw new ApplicationError(detail || error.message || 'Failed to load workflows');
 				}
 			},
 		},
@@ -175,7 +149,16 @@ export class StrakerVerify implements INodeType {
 					const binaryProperty = this.getNodeParameter('binaryProperty', i, 'data') as string;
 
 					// Validate workflow ID
-					const availableWorkflows = await fetchWorkflows(this, environment);
+					let availableWorkflows: Workflow[];
+					try {
+						availableWorkflows = await fetchWorkflows(this, environment);
+					} catch (error: any) {
+						const detail = getApiErrorDetail(error);
+						if (detail) {
+							throw new NodeApiError(this.getNode(), error, { message: detail });
+						}
+						throw new NodeApiError(this.getNode(), error);
+					}
 					const workflowIds = availableWorkflows.map((w: Workflow) => w.uuid);
 					if (!workflowIds.includes(workflow)) {
 						throw new NodeOperationError(
@@ -234,8 +217,11 @@ export class StrakerVerify implements INodeType {
 
 						returnItems.push({ json: responseData });
 					} catch (error: any) {
-						const errorMessage = extractApiErrorMessage(error, 'Failed to create project.');
-						throw new NodeApiError(this.getNode(), error, { message: errorMessage });
+						const detail = getApiErrorDetail(error);
+						if (detail) {
+							throw new NodeApiError(this.getNode(), error, { message: detail });
+						}
+						throw new NodeApiError(this.getNode(), error);
 					}
 
 					break;
@@ -256,8 +242,11 @@ export class StrakerVerify implements INodeType {
 							},
 						);
 					} catch (error: any) {
-						const errorMessage = extractApiErrorMessage(error, 'Failed to download project files.');
-						throw new NodeApiError(this.getNode(), error, { message: errorMessage, itemIndex: i });
+						const detail = getApiErrorDetail(error);
+						if (detail) {
+							throw new NodeApiError(this.getNode(), error, { message: detail, itemIndex: i });
+						}
+						throw new NodeApiError(this.getNode(), error, { itemIndex: i });
 					}
 
 					const files = responseData?.data ?? responseData;
