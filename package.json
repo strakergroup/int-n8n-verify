@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-straker-verify",
-  "version": "0.1.30",
+  "version": "0.1.31",
   "description": "Straker Verify Integration for n8n",
   "keywords": [
     "n8n-community-node-package",
@@ -47,6 +47,18 @@
   },
   "peerDependencies": {
     "n8n-workflow": "^1.0.0"
+  },
+  "overrides": {
+    "axios": ">=1.13.5",
+    "form-data": ">=4.0.4",
+    "lodash": ">=4.17.22"
+  },
+  "pnpm": {
+    "overrides": {
+      "axios": ">=1.13.5",
+      "form-data": ">=4.0.4",
+      "lodash": ">=4.17.22"
+    }
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
