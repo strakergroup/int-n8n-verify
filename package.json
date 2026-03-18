@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-straker-verify",
-  "version": "0.1.30",
+  "version": "0.1.31",
   "description": "Straker Verify Integration for n8n",
   "keywords": [
     "n8n-community-node-package",
@@ -46,7 +46,7 @@
     ]
   },
   "peerDependencies": {
-    "n8n-workflow": "^1.0.0"
+    "n8n-workflow": "^2.0.0"
   },
   "pnpm": {
     "overrides": {
@@ -64,7 +64,7 @@
     "@types/node": "^22.18.11",
     "@typescript-eslint/parser": "^7.18.0",
     "eslint": "^8.57.1",
-    "eslint-plugin-n8n-nodes-base": "^1.16.4",
+    "eslint-plugin-n8n-nodes-base": "^1.16.6",
     "gulp": "^5.0.1",
     "jest": "^30.2.0",
     "prettier": "^3.6.2",
