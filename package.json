@@ -48,17 +48,6 @@
   "peerDependencies": {
     "n8n-workflow": "^2.0.0"
   },
-  "pnpm": {
-    "overrides": {
-      "form-data": ">=4.0.4",
-      "lodash": ">=4.17.23",
-      "minimatch": ">=9.0.7",
-      "flatted": ">=3.4.0",
-      "ajv": ">=6.14.0",
-      "js-yaml": ">=4.1.1",
-      "glob": ">=10.5.0"
-    }
-  },
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "@types/node": "^22.18.11",
