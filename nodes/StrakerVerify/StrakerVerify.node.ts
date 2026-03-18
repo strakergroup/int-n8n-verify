@@ -8,7 +8,6 @@ import {
 	NodeApiError,
 	ILoadOptionsFunctions,
 	ApplicationError,
-	NodeConnectionTypes,
 } from 'n8n-workflow';
 import { projectOperations, projectFields } from './StrakerVerifyDescription';
 import { Language, Workflow } from './type';
@@ -52,8 +51,8 @@ export class StrakerVerify implements INodeType {
 		defaults: {
 			name: 'Straker Verify',
 		},
-		inputs: [NodeConnectionTypes.Main],
-		outputs: [NodeConnectionTypes.Main],
+		inputs: ['main'],
+		outputs: ['main'],
 		usableAsTool: true,
 		credentials: [
 			{
